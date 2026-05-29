@@ -25,7 +25,6 @@ jobs:
         with:
           image: python:3.11
           run: |
-            cd backend
             pip install -r requirements.txt
             pip install pytest pytest-cov
             pytest tests/ --cov=app --cov-report=xml --cov-report=term-missing
@@ -33,12 +32,12 @@ jobs:
       - name: Publish test results
         uses: cloudbees-io/publish-test-results@v1
         with:
-          test-results: backend/pytest-results.xml
+          test-results: pytest-results.xml
 
       - name: Publish coverage report
         uses: cloudbees-io/publish-coverage@v1
         with:
-          coverage-report: backend/coverage.xml
+          coverage-report: coverage.xml
 
   smart-tests:
     needs: test
@@ -64,17 +63,17 @@ jobs:
         uses: cloudbees-io/sast-scan@v1
         with:
           language: python
-          source-path: backend/
+          source-path: .
 
       - name: SCA Scan
         uses: cloudbees-io/sca-scan@v1
         with:
-          manifest-file: backend/requirements.txt
+          manifest-file: requirements.txt
 
       - name: Secret Scan
         uses: cloudbees-io/secret-scan@v1
         with:
-          source-path: backend/
+          source-path: .
 
   build:
     needs: [test, security-scan]
@@ -92,8 +91,8 @@ jobs:
       - name: Build and push Docker image
         uses: cloudbees-io/docker-build-push@v1
         with:
-          context: backend/
-          dockerfile: backend/Dockerfile
+          context: .
+          dockerfile: Dockerfile
           push: true
           tags: |
             ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
