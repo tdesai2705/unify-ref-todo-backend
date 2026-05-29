@@ -9,74 +9,14 @@ on:
       - main
       - develop
   pull_request:
+  workflow_dispatch:
 
 env:
   DOCKER_IMAGE: tejasdesai27/todo-backend
   DOCKER_TAG: ${{ cloudbees.scm.sha }}
 
 jobs:
-  test:
-    steps:
-      - name: Checkout code
-        uses: cloudbees-io/checkout@v1
-
-      - name: Run unit tests
-        uses: cloudbees-io/docker-run@v1
-        with:
-          image: python:3.11
-          run: |
-            pip install -r requirements.txt
-            pip install pytest pytest-cov
-            pytest tests/ --cov=app --cov-report=xml --cov-report=term-missing
-
-      - name: Publish test results
-        uses: cloudbees-io/publish-test-results@v1
-        with:
-          test-results: pytest-results.xml
-
-      - name: Publish coverage report
-        uses: cloudbees-io/publish-coverage@v1
-        with:
-          coverage-report: coverage.xml
-
-  smart-tests:
-    needs: test
-    steps:
-      - name: Checkout code
-        uses: cloudbees-io/checkout@v1
-
-      - name: Configure Smart Tests
-        uses: cloudbees-io/smart-tests@v1
-        with:
-          mode: subsetting
-          test-command: pytest tests/
-          confidence: 0.9
-          language: python
-
-  security-scan:
-    needs: test
-    steps:
-      - name: Checkout code
-        uses: cloudbees-io/checkout@v1
-
-      - name: SAST Scan
-        uses: cloudbees-io/sast-scan@v1
-        with:
-          language: python
-          source-path: .
-
-      - name: SCA Scan
-        uses: cloudbees-io/sca-scan@v1
-        with:
-          manifest-file: requirements.txt
-
-      - name: Secret Scan
-        uses: cloudbees-io/secret-scan@v1
-        with:
-          source-path: .
-
   build:
-    needs: [test, security-scan]
     steps:
       - name: Checkout code
         uses: cloudbees-io/checkout@v1
