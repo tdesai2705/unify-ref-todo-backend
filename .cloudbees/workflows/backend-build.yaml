@@ -58,22 +58,23 @@ jobs:
       - name: Checkout code
         uses: cloudbees-io/checkout@v1
 
-      - name: Configure Docker credentials
+      - name: Configure Docker Hub credentials
+        id: dockerconfig
         uses: cloudbees-io/configure-oci-credentials@v1
         with:
-          registry: docker.io
+          registry: index.docker.io
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and push Docker image
-        uses: cloudbees-io/docker-build-push@v1
+        id: kaniko-build
+        uses: cloudbees-io/kaniko@v1
+        kind: build
         with:
+          destination: ${{ secrets.DOCKER_USERNAME }}/todo-backend:${{ cloudbees.scm.sha }},${{ secrets.DOCKER_USERNAME }}/todo-backend:latest
           context: .
           dockerfile: Dockerfile
-          push: true
-          tags: |
-            tejasdesai27/todo-backend:${{ cloudbees.scm.sha }}
-            tejasdesai27/todo-backend:latest
+          verbosity: info
 
       - name: Publish build evidence
         uses: cloudbees-io/publish-evidence-item@v1
@@ -81,6 +82,9 @@ jobs:
           content: |-
             ## Build Evidence - Todo Backend
             - Run ID: ${{ cloudbees.run_id }}
-            - Image: tejasdesai27/todo-backend:${{ cloudbees.scm.sha }}
-            - Registry: Docker Hub
-            - Status: SUCCESS ✅
+            - Branch: ${{ cloudbees.scm.branch }}
+            - Commit: ${{ cloudbees.scm.sha }}
+            - Docker Image: ${{ secrets.DOCKER_USERNAME }}/todo-backend:${{ cloudbees.scm.sha }}
+            - Also tagged as: ${{ secrets.DOCKER_USERNAME }}/todo-backend:latest
+            - Image Digest: ${{ steps.kaniko-build.outputs.digest }}
+            - Build Status: Successfully built and pushed to Docker Hub ✅
