@@ -1,0 +1,107 @@
+apiVersion: automation.cloudbees.io/v1alpha1
+kind: workflow
+
+name: Backend Build and Test
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+
+env:
+  DOCKER_IMAGE: tejasdesai27/todo-backend
+  DOCKER_TAG: ${{ cloudbees.scm.sha }}
+
+jobs:
+  test:
+    steps:
+      - name: Checkout code
+        uses: cloudbees-io/checkout@v1
+
+      - name: Run unit tests
+        uses: cloudbees-io/docker-run@v1
+        with:
+          image: python:3.11
+          run: |
+            cd backend
+            pip install -r requirements.txt
+            pip install pytest pytest-cov
+            pytest tests/ --cov=app --cov-report=xml --cov-report=term-missing
+
+      - name: Publish test results
+        uses: cloudbees-io/publish-test-results@v1
+        with:
+          test-results: backend/pytest-results.xml
+
+      - name: Publish coverage report
+        uses: cloudbees-io/publish-coverage@v1
+        with:
+          coverage-report: backend/coverage.xml
+
+  smart-tests:
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: cloudbees-io/checkout@v1
+
+      - name: Configure Smart Tests
+        uses: cloudbees-io/smart-tests@v1
+        with:
+          mode: subsetting
+          test-command: pytest tests/
+          confidence: 0.9
+          language: python
+
+  security-scan:
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: cloudbees-io/checkout@v1
+
+      - name: SAST Scan
+        uses: cloudbees-io/sast-scan@v1
+        with:
+          language: python
+          source-path: backend/
+
+      - name: SCA Scan
+        uses: cloudbees-io/sca-scan@v1
+        with:
+          manifest-file: backend/requirements.txt
+
+      - name: Secret Scan
+        uses: cloudbees-io/secret-scan@v1
+        with:
+          source-path: backend/
+
+  build:
+    needs: [test, security-scan]
+    steps:
+      - name: Checkout code
+        uses: cloudbees-io/checkout@v1
+
+      - name: Configure Docker credentials
+        uses: cloudbees-io/configure-oci-credentials@v1
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: cloudbees-io/docker-build-push@v1
+        with:
+          context: backend/
+          dockerfile: backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
+            ${{ env.DOCKER_IMAGE }}:latest
+
+      - name: Generate build evidence
+        uses: cloudbees-io/generate-evidence@v1
+        with:
+          artifact-name: backend-image
+          artifact-version: ${{ env.DOCKER_TAG }}
+          artifact-type: docker-image

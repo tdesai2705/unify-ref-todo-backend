@@ -1,0 +1,66 @@
+# Smart Tests (Predictive Test Selection) Configuration
+# This file configures Smart Tests behavior for the backend repository
+
+version: 1
+
+# Smart Tests mode
+# - observation: Record test-to-code relationships (use for first 5-10 commits)
+# - subsetting: AI-powered intelligent test selection (use after observation period)
+mode: subsetting
+
+# Test command to execute
+test-command: pytest tests/
+
+# Language for code analysis
+language: python
+
+# Confidence threshold for test selection (0.0 - 1.0)
+# Higher = more conservative (runs more tests)
+# Lower = more aggressive (runs fewer tests)
+confidence: 0.9
+
+# Test framework
+framework: pytest
+
+# Source directories to analyze for changes
+source-paths:
+  - app/
+  - tests/
+
+# File patterns to exclude from analysis
+exclude-patterns:
+  - "**/__pycache__/**"
+  - "**/*.pyc"
+  - "**/venv/**"
+  - "**/.pytest_cache/**"
+
+# Test discovery patterns
+test-patterns:
+  - "tests/test_*.py"
+  - "tests/*_test.py"
+
+# Minimum tests to always run (even if Smart Tests predicts no tests)
+minimum-tests: 2
+
+# Maximum test execution time before fallback to full suite
+timeout: 300
+
+# Enable verbose logging
+verbose: true
+
+# Analytics and reporting
+analytics:
+  enabled: true
+  report-savings: true
+  track-confidence: true
+
+# Observation mode settings (for initial learning phase)
+observation:
+  duration: 10 commits
+  auto-transition: true  # Auto-switch to subsetting after observation
+
+# Integration with CloudBees Unify
+integration:
+  publish-results: true
+  track-metrics: true
+  dora-metrics: true
