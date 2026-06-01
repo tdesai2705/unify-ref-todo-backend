@@ -5,6 +5,13 @@ from datetime import datetime
 
 bp = Blueprint('api', __name__)
 
+# Health Check Endpoint
+
+@bp.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for Kubernetes probes"""
+    return jsonify({'status': 'healthy', 'service': 'todo-backend'}), 200
+
 # Todo CRUD Endpoints
 
 @bp.route('/todos', methods=['GET'])
