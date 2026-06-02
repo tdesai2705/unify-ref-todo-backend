@@ -23,7 +23,7 @@ def create_app(config_name='default'):
 
     # Register blueprints
     from app.routes import bp as api_bp
-    app.register_blueprint(api_bp, url_prefix='/api')
+    app.register_blueprint(api_bp)
 
     # Health check endpoint
     @app.route('/health')
