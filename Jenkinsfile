@@ -134,21 +134,21 @@ spec:
                 container('python') {
                     echo "📝 Updating infrastructure repo with new image tag..."
                     script {
-                        withCredentials([usernamePassword(
-                            credentialsId: 'github-credentials',
-                            usernameVariable: 'GIT_USER',
-                            passwordVariable: 'GIT_TOKEN'
-                        )]) {
+                        sshagent(['github-ssh-key']) {
                             sh """
-                                # Install git
-                                apt-get update && apt-get install -y git
+                                # Install git and openssh
+                                apt-get update && apt-get install -y git openssh-client
 
                                 # Configure git
                                 git config --global user.email "ci@cloudbees.com"
                                 git config --global user.name "CloudBees CI"
 
-                                # Clone infrastructure repo
-                                git clone https://\${GIT_USER}:\${GIT_TOKEN}@github.com/tdesai2705/unify-ref-todo-infrastructure.git infra
+                                # Add GitHub to known hosts
+                                mkdir -p ~/.ssh
+                                ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+                                # Clone infrastructure repo via SSH
+                                git clone git@github.com:tdesai2705/unify-ref-todo-infrastructure.git infra
                                 cd infra
 
                                 # Determine environment based on branch
@@ -171,7 +171,7 @@ spec:
                                 # Commit and push
                                 git add kubernetes/\${ENV}/backend-values.yaml
                                 git commit -m "Update backend image to ${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
-                                git push https://\${GIT_USER}:\${GIT_TOKEN}@github.com/tdesai2705/unify-ref-todo-infrastructure.git main
+                                git push origin main
 
                                 echo "✅ Infrastructure repo updated. ArgoCD will sync automatically."
                             """
