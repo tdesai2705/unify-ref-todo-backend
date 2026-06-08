@@ -134,7 +134,10 @@ spec:
                 container('python') {
                     echo "📝 Updating infrastructure repo with new image tag..."
                     script {
-                        sshagent(['github-ssh-key']) {
+                        withCredentials([sshUserPrivateKey(
+                            credentialsId: 'github-ssh-key',
+                            keyFileVariable: 'SSH_KEY'
+                        )]) {
                             sh """
                                 # Install git and openssh
                                 apt-get update && apt-get install -y git openssh-client
@@ -143,8 +146,11 @@ spec:
                                 git config --global user.email "ci@cloudbees.com"
                                 git config --global user.name "CloudBees CI"
 
-                                # Add GitHub to known hosts
+                                # Set up SSH
                                 mkdir -p ~/.ssh
+                                chmod 700 ~/.ssh
+                                cp \$SSH_KEY ~/.ssh/id_ed25519
+                                chmod 600 ~/.ssh/id_ed25519
                                 ssh-keyscan github.com >> ~/.ssh/known_hosts
 
                                 # Clone infrastructure repo via SSH
