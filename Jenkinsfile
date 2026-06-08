@@ -20,6 +20,9 @@ spec:
     image: docker:24-dind
     securityContext:
       privileged: true
+    args:
+    - --host=tcp://0.0.0.0:2375
+    - --tls=false
     volumeMounts:
     - name: docker-socket
       mountPath: /var/run
