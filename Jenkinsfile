@@ -134,9 +134,10 @@ spec:
                 container('python') {
                     echo "📝 Updating infrastructure repo with new image tag..."
                     script {
-                        withCredentials([string(
+                        withCredentials([usernamePassword(
                             credentialsId: 'github-credentials',
-                            variable: 'GIT_TOKEN'
+                            usernameVariable: 'GIT_USER',
+                            passwordVariable: 'GIT_TOKEN'
                         )]) {
                             sh """
                                 # Install git
@@ -147,7 +148,7 @@ spec:
                                 git config --global user.name "CloudBees CI"
 
                                 # Clone infrastructure repo
-                                git clone https://tdesai2705:\${GIT_TOKEN}@github.com/tdesai2705/unify-ref-todo-infrastructure.git infra
+                                git clone https://\${GIT_USER}:\${GIT_TOKEN}@github.com/tdesai2705/unify-ref-todo-infrastructure.git infra
                                 cd infra
 
                                 # Determine environment based on branch
