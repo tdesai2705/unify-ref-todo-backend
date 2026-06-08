@@ -171,7 +171,7 @@ spec:
                                 # Commit and push
                                 git add kubernetes/\${ENV}/backend-values.yaml
                                 git commit -m "Update backend image to ${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
-                                git push origin main
+                                git push https://\${GIT_USER}:\${GIT_TOKEN}@github.com/tdesai2705/unify-ref-todo-infrastructure.git main
 
                                 echo "✅ Infrastructure repo updated. ArgoCD will sync automatically."
                             """
