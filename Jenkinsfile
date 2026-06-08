@@ -134,9 +134,9 @@ spec:
                 container('python') {
                     echo "📝 Updating infrastructure repo with new image tag..."
                     script {
-                        withCredentials([secretFile(
+                        withCredentials([sshUserPrivateKey(
                             credentialsId: 'github-ssh-key',
-                            variable: 'SSH_KEY'
+                            keyFileVariable: 'SSH_KEY'
                         )]) {
                             sh """
                                 # Install git and openssh
