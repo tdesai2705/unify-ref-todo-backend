@@ -151,8 +151,6 @@ spec:
                                 chmod 700 ~/.ssh
                                 cp \$SSH_KEY ~/.ssh/id_ed25519
                                 chmod 600 ~/.ssh/id_ed25519
-                                cat ~/.ssh/id_ed25519
-
                                 ssh-keyscan github.com >> ~/.ssh/known_hosts
 
                                 # Clone infrastructure repo via SSH
