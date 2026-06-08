@@ -151,6 +151,15 @@ spec:
                                 chmod 700 ~/.ssh
                                 cp \$SSH_KEY ~/.ssh/id_ed25519
                                 chmod 600 ~/.ssh/id_ed25519
+
+                                # Debug: verify key format (no secret content exposed)
+                                echo "=== Key debug ==="
+                                echo "Byte count: \$(wc -c < ~/.ssh/id_ed25519)"
+                                echo "Line count: \$(wc -l < ~/.ssh/id_ed25519)"
+                                echo "First line: \$(head -1 ~/.ssh/id_ed25519)"
+                                echo "Last line: \$(tail -1 ~/.ssh/id_ed25519)"
+                                echo "=== End key debug ==="
+
                                 ssh-keyscan github.com >> ~/.ssh/known_hosts
 
                                 # Clone infrastructure repo via SSH
