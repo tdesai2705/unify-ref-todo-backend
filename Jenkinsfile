@@ -23,6 +23,9 @@ spec:
     args:
     - --host=tcp://0.0.0.0:2375
     - --tls=false
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
     volumeMounts:
     - name: docker-socket
       mountPath: /var/run
