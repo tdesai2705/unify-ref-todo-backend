@@ -162,13 +162,13 @@ spec:
                                 echo "Updating \${ENV} environment with image tag: ${IMAGE_TAG}"
 
                                 # Update backend image tag in values file
-                                sed -i "s|tag: .*|tag: ${IMAGE_TAG}|" kubernetes/\${ENV}/backend-values.yaml
+                                sed -i "s|tag: .*|tag: ${IMAGE_TAG}|" helm/todo-app/envs/\${ENV}/backend-values.yaml
 
                                 echo "Updated values file:"
-                                cat kubernetes/\${ENV}/backend-values.yaml
+                                cat helm/todo-app/envs/\${ENV}/backend-values.yaml
 
                                 # Commit and push
-                                git add kubernetes/\${ENV}/backend-values.yaml
+                                git add helm/todo-app/envs/\${ENV}/backend-values.yaml
                                 git commit -m "Update backend image to ${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
                                 git push origin main
 
