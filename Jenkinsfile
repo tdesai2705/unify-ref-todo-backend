@@ -134,27 +134,20 @@ spec:
                 container('python') {
                     echo "📝 Updating infrastructure repo with new image tag..."
                     script {
-                        withCredentials([sshUserPrivateKey(
-                            credentialsId: 'github-ssh-key',
-                            keyFileVariable: 'SSH_KEY'
+                        withCredentials([string(
+                            credentialsId: 'github-pat',
+                            variable: 'GITHUB_TOKEN'
                         )]) {
                             sh """
-                                # Install git and openssh
-                                apt-get update && apt-get install -y git openssh-client
+                                # Install git
+                                apt-get update && apt-get install -y git
 
                                 # Configure git
                                 git config --global user.email "ci@cloudbees.com"
                                 git config --global user.name "CloudBees CI"
 
-                                # Set up SSH
-                                mkdir -p ~/.ssh
-                                chmod 700 ~/.ssh
-                                cp \$SSH_KEY ~/.ssh/id_ed25519
-                                chmod 600 ~/.ssh/id_ed25519
-                                ssh-keyscan github.com >> ~/.ssh/known_hosts
-
-                                # Clone infrastructure repo via SSH
-                                git clone git@github.com:tdesai2705/unify-ref-todo-infrastructure.git infra
+                                # Clone infrastructure repo via HTTPS with PAT
+                                git clone https://\$GITHUB_TOKEN@github.com/tdesai2705/unify-ref-todo-infrastructure.git infra
                                 cd infra
 
                                 # Determine environment based on branch
