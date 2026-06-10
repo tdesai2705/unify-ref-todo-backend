@@ -30,4 +30,16 @@ def create_app(config_name='default'):
     def health():
         return {'status': 'healthy', 'service': 'todo-backend'}, 200
 
+    # Seed default demo user so the app works out of the box
+    with app.app_context():
+        try:
+            from app.models import User
+            if not User.query.filter_by(id=1).first():
+                demo = User(username='demo', email='demo@example.com')
+                demo.set_password('demo')
+                db.session.add(demo)
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
+
     return app
