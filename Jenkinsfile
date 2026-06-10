@@ -96,6 +96,7 @@ spec:
             steps {
                 container('python') {
                     sh """
+                        apt-get update && apt-get install -y --no-install-recommends default-jre-headless
                         pip install --no-cache-dir -r requirements.txt
                         pip install launchable
                     """
