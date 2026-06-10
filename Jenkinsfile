@@ -1,5 +1,5 @@
 // CloudBees CI Pipeline - Todo Backend
-// Build → Test → Push Image → Update Helm Values → ArgoCD Auto-Deploys
+// Build → Test (with Smart Tests) → Push Image → Update Helm Values → ArgoCD Auto-Deploys
 
 pipeline {
     agent {
@@ -63,13 +63,16 @@ spec:
         IMAGE_TAG = "${BRANCH_NAME_CLEAN}-${BUILD_NUMBER}"
 
         INFRA_REPO = 'https://github.com/tdesai2705/unify-ref-todo-infrastructure.git'
+
+        LAUNCHABLE_ORGANIZATION = 'tejas'
+        LAUNCHABLE_WORKSPACE = 'tejas'
     }
 
     stages {
         stage('Setup') {
             steps {
                 container('python') {
-                    echo "🔧 Setting up workspace..."
+                    echo "Setting up workspace..."
                     sh """
                         echo "Build: ${BUILD_NUMBER}"
                         echo "Branch: ${BRANCH_NAME}"
@@ -81,11 +84,36 @@ spec:
 
         stage('Checkout') {
             steps {
-                echo "🔄 Checking out code from branch: ${env.BRANCH_NAME}"
+                echo "Checking out code from branch: ${env.BRANCH_NAME}"
                 checkout scm
-
                 script {
                     env.GIT_COMMIT_SHORT = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                }
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                container('python') {
+                    sh """
+                        pip install --no-cache-dir -r requirements.txt
+                        pip install launchable
+                    """
+                }
+            }
+        }
+
+        stage('Smart Tests - Record Build') {
+            steps {
+                container('python') {
+                    withCredentials([string(credentialsId: 'SMART_TESTS_TOKEN', variable: 'LAUNCHABLE_TOKEN')]) {
+                        sh """
+                            launchable verify || true
+                            launchable record build \
+                                --name ${BUILD_NUMBER} \
+                                --source .
+                        """
+                    }
                 }
             }
         }
@@ -93,11 +121,25 @@ spec:
         stage('Test') {
             steps {
                 container('python') {
-                    echo "🧪 Installing dependencies and running tests..."
-                    sh """
-                        pip install --no-cache-dir -r requirements.txt
-                        echo "Tests would run here - pytest etc."
-                    """
+                    withCredentials([string(credentialsId: 'SMART_TESTS_TOKEN', variable: 'LAUNCHABLE_TOKEN')]) {
+                        sh """
+                            pytest tests/ \
+                                --junit-xml=test-results/results.xml \
+                                --cov=app \
+                                --cov-report=xml:test-results/coverage.xml \
+                                -v || true
+
+                            launchable record tests \
+                                --build ${BUILD_NUMBER} \
+                                --suite todo-backend-tests \
+                                pytest test-results/results.xml
+                        """
+                    }
+                }
+            }
+            post {
+                always {
+                    junit 'test-results/results.xml'
                 }
             }
         }
@@ -105,7 +147,7 @@ spec:
         stage('Docker Build & Push') {
             steps {
                 container('docker-cli') {
-                    echo "🐳 Building and pushing Docker image..."
+                    echo "Building and pushing Docker image..."
                     script {
                         withCredentials([usernamePassword(
                             credentialsId: 'dockerhub-credentials',
@@ -121,7 +163,7 @@ spec:
                                 docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:${BRANCH_NAME_CLEAN}-latest
                                 docker push ${IMAGE_NAME}:${BRANCH_NAME_CLEAN}-latest
 
-                                echo "✅ Image pushed: ${IMAGE_NAME}:${IMAGE_TAG}"
+                                echo "Image pushed: ${IMAGE_NAME}:${IMAGE_TAG}"
                             """
                         }
                     }
@@ -132,25 +174,21 @@ spec:
         stage('Update Infrastructure Repo') {
             steps {
                 container('python') {
-                    echo "📝 Updating infrastructure repo with new image tag..."
+                    echo "Updating infrastructure repo with new image tag..."
                     script {
                         withCredentials([string(
                             credentialsId: 'github-pat',
                             variable: 'GITHUB_TOKEN'
                         )]) {
                             sh """
-                                # Install git
                                 apt-get update && apt-get install -y git
 
-                                # Configure git
                                 git config --global user.email "ci@cloudbees.com"
                                 git config --global user.name "CloudBees CI"
 
-                                # Clone infrastructure repo via HTTPS with PAT
                                 git clone https://\$GITHUB_TOKEN@github.com/tdesai2705/unify-ref-todo-infrastructure.git infra
                                 cd infra
 
-                                # Determine environment based on branch
                                 if [ "${env.BRANCH_NAME}" = "develop" ]; then
                                     ENV="dev"
                                 elif [ "${env.BRANCH_NAME}" = "main" ]; then
@@ -161,18 +199,16 @@ spec:
 
                                 echo "Updating \${ENV} environment with image tag: ${IMAGE_TAG}"
 
-                                # Update backend image tag in values file
                                 sed -i "s|tag: .*|tag: ${IMAGE_TAG}|" helm/todo-app/envs/\${ENV}/backend-values.yaml
 
                                 echo "Updated values file:"
                                 cat helm/todo-app/envs/\${ENV}/backend-values.yaml
 
-                                # Commit and push
                                 git add helm/todo-app/envs/\${ENV}/backend-values.yaml
                                 git commit -m "Update backend image to ${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
                                 git push origin main
 
-                                echo "✅ Infrastructure repo updated. ArgoCD will sync automatically."
+                                echo "Infrastructure repo updated. ArgoCD will sync automatically."
                             """
                         }
                     }
@@ -183,16 +219,11 @@ spec:
 
     post {
         success {
-            echo "✅ Backend pipeline completed successfully!"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "📦 Build: ${BUILD_NUMBER}"
-            echo "🌿 Branch: ${env.BRANCH_NAME}"
-            echo "🐳 Image: ${IMAGE_NAME}:${IMAGE_TAG}"
-            echo "🔄 ArgoCD will auto-deploy to ${env.BRANCH_NAME == 'develop' ? 'dev' : 'qa'} environment"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "Backend pipeline completed successfully!"
+            echo "Build: ${BUILD_NUMBER} | Branch: ${env.BRANCH_NAME} | Image: ${IMAGE_NAME}:${IMAGE_TAG}"
         }
         failure {
-            echo "❌ Backend pipeline failed!"
+            echo "Backend pipeline failed!"
         }
     }
 }
