@@ -109,6 +109,7 @@ spec:
                 container('python') {
                     withCredentials([string(credentialsId: 'SMART_TESTS_TOKEN', variable: 'LAUNCHABLE_TOKEN')]) {
                         sh """
+                            git config --global --add safe.directory ${WORKSPACE}
                             launchable verify || true
                             launchable record build \
                                 --name ${BUILD_NUMBER} \
