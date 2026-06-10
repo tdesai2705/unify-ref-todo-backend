@@ -210,6 +210,7 @@ spec:
 
                                 git add helm/todo-app/envs/\${ENV}/backend-values.yaml
                                 git commit -m "Update backend image to ${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
+                                git pull --rebase origin main
                                 git push origin main
 
                                 echo "Infrastructure repo updated. ArgoCD will sync automatically."
