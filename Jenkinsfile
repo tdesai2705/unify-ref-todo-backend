@@ -125,7 +125,9 @@ spec:
                 container('python') {
                     withCredentials([string(credentialsId: 'SMART_TESTS_TOKEN', variable: 'LAUNCHABLE_TOKEN')]) {
                         sh """
-                            pytest tests/ \
+                            mkdir -p test-results
+
+                            PYTHONPATH=. pytest tests/ \
                                 --junit-xml=test-results/results.xml \
                                 --cov=app \
                                 --cov-report=xml:test-results/coverage.xml \
@@ -133,7 +135,7 @@ spec:
 
                             launchable record tests \
                                 --build ${BUILD_NUMBER} \
-                                --suite todo-backend-tests \
+                                --test-suite todo-backend-tests \
                                 pytest test-results/results.xml
                         """
                     }
