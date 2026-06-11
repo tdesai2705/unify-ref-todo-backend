@@ -98,7 +98,7 @@ spec:
                     sh """
                         apt-get update && apt-get install -y --no-install-recommends default-jre-headless git
                         pip install --no-cache-dir -r requirements.txt
-                        pip install launchable
+                        pip install smart-tests-cli==2.11.2
                     """
                 }
             }
@@ -107,12 +107,12 @@ spec:
         stage('Smart Tests - Record Build') {
             steps {
                 container('python') {
-                    withCredentials([string(credentialsId: 'SMART_TESTS_TOKEN', variable: 'LAUNCHABLE_TOKEN')]) {
+                    withCredentials([string(credentialsId: 'SMART_TESTS_TOKEN', variable: 'SMART_TESTS_TOKEN')]) {
                         sh """
                             git config --global --add safe.directory ${WORKSPACE}
-                            launchable verify || true
-                            launchable record build \
-                                --name ${BUILD_NUMBER} \
+                            smart-tests verify || true
+                            smart-tests record build \
+                                --build ${BUILD_NUMBER} \
                                 --source .
                         """
                     }
@@ -123,7 +123,7 @@ spec:
         stage('Test') {
             steps {
                 container('python') {
-                    withCredentials([string(credentialsId: 'SMART_TESTS_TOKEN', variable: 'LAUNCHABLE_TOKEN')]) {
+                    withCredentials([string(credentialsId: 'SMART_TESTS_TOKEN', variable: 'SMART_TESTS_TOKEN')]) {
                         sh """
                             mkdir -p test-results
 
@@ -133,7 +133,7 @@ spec:
                                 --cov-report=xml:test-results/coverage.xml \
                                 -v || true
 
-                            launchable record tests \
+                            smart-tests record tests \
                                 --build ${BUILD_NUMBER} \
                                 --test-suite todo-backend-tests \
                                 pytest test-results/results.xml
