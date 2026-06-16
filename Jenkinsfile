@@ -127,7 +127,7 @@ spec:
                         sh """
                             mkdir -p test-results
 
-                            SESSION=\$(smart-tests record session start --build ${BUILD_NUMBER})
+                            SESSION=\$(smart-tests record session --build ${BUILD_NUMBER})
                             echo "Smart Tests session: \$SESSION"
 
                             PYTHONPATH=. pytest tests/ \
@@ -139,8 +139,6 @@ spec:
                             smart-tests record tests \
                                 --session \$SESSION \
                                 pytest test-results/results.xml
-
-                            smart-tests record session close \$SESSION
                         """
                     }
                 }
