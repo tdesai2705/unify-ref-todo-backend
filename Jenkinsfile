@@ -11,7 +11,7 @@ spec:
   serviceAccountName: jenkins-agents
   containers:
   - name: python
-    image: python:3.11-slim
+    image: python:3.13-slim
     command:
     - sleep
     args:
@@ -127,6 +127,9 @@ spec:
                         sh """
                             mkdir -p test-results
 
+                            SESSION=\$(smart-tests record session --build ${BUILD_NUMBER} --test-suite todo-backend-tests)
+                            echo "Smart Tests session: \$SESSION"
+
                             PYTHONPATH=. pytest tests/ \
                                 --junit-xml=test-results/results.xml \
                                 --cov=app \
@@ -134,8 +137,7 @@ spec:
                                 -v || true
 
                             smart-tests record tests \
-                                --build ${BUILD_NUMBER} \
-                                --test-suite todo-backend-tests \
+                                --session \$SESSION \
                                 pytest test-results/results.xml
                         """
                     }
