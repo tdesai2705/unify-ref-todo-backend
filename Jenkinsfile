@@ -11,7 +11,7 @@ spec:
   serviceAccountName: jenkins-agents
   containers:
   - name: python
-    image: python:3.11-slim
+    image: python:3.13-slim
     command:
     - sleep
     args:
