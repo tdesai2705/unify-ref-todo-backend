@@ -134,7 +134,6 @@ spec:
                                 -v || true
 
                             smart-tests record tests \
-                                --test-suite todo-backend-tests \
                                 pytest test-results/results.xml
                         """
                     }
