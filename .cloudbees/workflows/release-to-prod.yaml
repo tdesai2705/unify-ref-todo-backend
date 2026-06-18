@@ -46,8 +46,10 @@ jobs:
         uses: docker://alpine:latest
         shell: sh
         run: |
-          sed -i "s|tag: .*|tag: ${{ steps.read-tags.outputs.BACKEND_TAG }}|" infra/helm/todo-app/envs/prod/backend-values.yaml
-          sed -i "s|tag: .*|tag: ${{ steps.read-tags.outputs.FRONTEND_TAG }}|" infra/helm/todo-app/envs/prod/frontend-values.yaml
+          BACKEND_TAG="${{ steps.read-tags.outputs.BACKEND_TAG }}"
+          FRONTEND_TAG="${{ steps.read-tags.outputs.FRONTEND_TAG }}"
+          sed -i "s/tag: .*/tag: ${BACKEND_TAG}/" infra/helm/todo-app/envs/prod/backend-values.yaml
+          sed -i "s/tag: .*/tag: ${FRONTEND_TAG}/" infra/helm/todo-app/envs/prod/frontend-values.yaml
           echo "prod/backend-values.yaml:"
           cat infra/helm/todo-app/envs/prod/backend-values.yaml
           echo "prod/frontend-values.yaml:"
