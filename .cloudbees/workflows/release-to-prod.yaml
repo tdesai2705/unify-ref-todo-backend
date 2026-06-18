@@ -20,15 +20,24 @@ jobs:
         run: |
           git clone https://${{ secrets.GITHUB_PAT }}@github.com/tdesai2705/unify-ref-todo-infrastructure.git infra
 
-      - name: Read QA image tags
-        id: read-tags
+      - name: Read QA tags and update prod helm values
+        id: update-values
         uses: docker://alpine:latest
         shell: sh
         run: |
-          BACKEND_TAG=$(grep 'tag:' infra/helm/todo-app/envs/qa/backend-values.yaml | awk '{print $2}')
-          FRONTEND_TAG=$(grep 'tag:' infra/helm/todo-app/envs/qa/frontend-values.yaml | awk '{print $2}')
+          BACKEND_TAG=$(grep 'tag:' infra/helm/todo-app/envs/qa/backend-values.yaml | awk '{print $2}' | tr -d '[:space:]')
+          FRONTEND_TAG=$(grep 'tag:' infra/helm/todo-app/envs/qa/frontend-values.yaml | awk '{print $2}' | tr -d '[:space:]')
           echo "Backend tag from QA : $BACKEND_TAG"
           echo "Frontend tag from QA: $FRONTEND_TAG"
+
+          awk -v tag="$BACKEND_TAG" '{if(/^[[:space:]]*tag:/) printf "  tag: %s\n", tag; else print}' infra/helm/todo-app/envs/prod/backend-values.yaml > /tmp/b.yaml && mv /tmp/b.yaml infra/helm/todo-app/envs/prod/backend-values.yaml
+          awk -v tag="$FRONTEND_TAG" '{if(/^[[:space:]]*tag:/) printf "  tag: %s\n", tag; else print}' infra/helm/todo-app/envs/prod/frontend-values.yaml > /tmp/f.yaml && mv /tmp/f.yaml infra/helm/todo-app/envs/prod/frontend-values.yaml
+
+          echo "prod/backend-values.yaml:"
+          cat infra/helm/todo-app/envs/prod/backend-values.yaml
+          echo "prod/frontend-values.yaml:"
+          cat infra/helm/todo-app/envs/prod/frontend-values.yaml
+
           echo "$BACKEND_TAG" > $CLOUDBEES_OUTPUTS/BACKEND_TAG
           echo "$FRONTEND_TAG" > $CLOUDBEES_OUTPUTS/FRONTEND_TAG
 
@@ -37,23 +46,10 @@ jobs:
         with:
           content: |-
             ## Release to Production — Approval Granted
-            - Backend image: tejasdesai27/todo-backend:${{ steps.read-tags.outputs.BACKEND_TAG }}
-            - Frontend image: tejasdesai27/todo-frontend:${{ steps.read-tags.outputs.FRONTEND_TAG }}
+            - Backend image: tejasdesai27/todo-backend:${{ steps.update-values.outputs.BACKEND_TAG }}
+            - Frontend image: tejasdesai27/todo-frontend:${{ steps.update-values.outputs.FRONTEND_TAG }}
             - Promoting from: qa-todo-app → prod-todo-app
             - Run ID: ${{ cloudbees.run_id }}
-
-      - name: Update prod helm values
-        uses: docker://alpine:latest
-        shell: sh
-        run: |
-          BACKEND_TAG="${{ steps.read-tags.outputs.BACKEND_TAG }}"
-          FRONTEND_TAG="${{ steps.read-tags.outputs.FRONTEND_TAG }}"
-          sed -i "s/tag: .*/tag: ${BACKEND_TAG}/" infra/helm/todo-app/envs/prod/backend-values.yaml
-          sed -i "s/tag: .*/tag: ${FRONTEND_TAG}/" infra/helm/todo-app/envs/prod/frontend-values.yaml
-          echo "prod/backend-values.yaml:"
-          cat infra/helm/todo-app/envs/prod/backend-values.yaml
-          echo "prod/frontend-values.yaml:"
-          cat infra/helm/todo-app/envs/prod/frontend-values.yaml
 
       - name: Commit and push to infra repo
         uses: docker://alpine/git:latest
@@ -71,7 +67,7 @@ jobs:
         with:
           content: |-
             ## Production Deployment Complete ✅
-            - Backend: tejasdesai27/todo-backend:${{ steps.read-tags.outputs.BACKEND_TAG }}
-            - Frontend: tejasdesai27/todo-frontend:${{ steps.read-tags.outputs.FRONTEND_TAG }}
+            - Backend: tejasdesai27/todo-backend:${{ steps.update-values.outputs.BACKEND_TAG }}
+            - Frontend: tejasdesai27/todo-frontend:${{ steps.update-values.outputs.FRONTEND_TAG }}
             - Infra repo updated — ArgoCD syncing to prod-todo-app namespace
             - URL: http://todo-app-prod.34.75.0.106.nip.io/todos
