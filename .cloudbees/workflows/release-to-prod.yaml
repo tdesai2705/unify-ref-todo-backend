@@ -1,0 +1,87 @@
+apiVersion: automation.cloudbees.io/v1alpha1
+kind: workflow
+
+name: Release to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_image_tag:
+        description: "Backend image tag to promote to prod (e.g. main-39)"
+        required: true
+      frontend_image_tag:
+        description: "Frontend image tag to promote to prod (e.g. main-13)"
+        required: true
+
+permissions:
+  scm-token-own: read
+  id-token: read
+
+jobs:
+  validate:
+    steps:
+      - name: Validate inputs
+        uses: docker://alpine:latest
+        shell: sh
+        run: |
+          echo "Release to Production"
+          echo "Backend image tag : ${{ inputs.backend_image_tag }}"
+          echo "Frontend image tag: ${{ inputs.frontend_image_tag }}"
+
+      - name: Publish release evidence
+        uses: cloudbees-io/publish-evidence-item@v1
+        with:
+          content: |-
+            ## Release to Production — Evidence
+            - Run ID: ${{ cloudbees.run_id }}
+            - Backend image: tejasdesai27/todo-backend:${{ inputs.backend_image_tag }}
+            - Frontend image: tejasdesai27/todo-frontend:${{ inputs.frontend_image_tag }}
+            - Triggered by: ${{ cloudbees.scm.sha }}
+
+  promote-to-prod:
+    needs: validate
+    environment: prod-todo
+    steps:
+      - name: Checkout infra repo
+        uses: cloudbees-io/checkout@v1
+        with:
+          repository: tdesai2705/unify-ref-todo-infrastructure
+          token: ${{ secrets.GITHUB_PAT }}
+
+      - name: Update prod helm values — backend
+        uses: docker://alpine:latest
+        shell: sh
+        run: |
+          apk add --no-cache sed
+          sed -i "s|tag: .*|tag: ${{ inputs.backend_image_tag }}|" helm/todo-app/envs/prod/backend-values.yaml
+          echo "Updated backend-values.yaml:"
+          cat helm/todo-app/envs/prod/backend-values.yaml
+
+      - name: Update prod helm values — frontend
+        uses: docker://alpine:latest
+        shell: sh
+        run: |
+          sed -i "s|tag: .*|tag: ${{ inputs.frontend_image_tag }}|" helm/todo-app/envs/prod/frontend-values.yaml
+          echo "Updated frontend-values.yaml:"
+          cat helm/todo-app/envs/prod/frontend-values.yaml
+
+      - name: Commit and push to infra repo
+        uses: docker://alpine/git:latest
+        shell: sh
+        run: |
+          git config user.email "ci@cloudbees.com"
+          git config user.name "CloudBees CI"
+          git add helm/todo-app/envs/prod/backend-values.yaml helm/todo-app/envs/prod/frontend-values.yaml
+          git commit -m "Promote backend:${{ inputs.backend_image_tag }} + frontend:${{ inputs.frontend_image_tag }} to prod [skip ci]" || echo "No changes to commit"
+          git push https://${{ secrets.GITHUB_PAT }}@github.com/tdesai2705/unify-ref-todo-infrastructure.git main
+
+      - name: Publish deployment evidence
+        uses: cloudbees-io/publish-evidence-item@v1
+        with:
+          content: |-
+            ## Production Deployment — Evidence
+            - Backend promoted: tejasdesai27/todo-backend:${{ inputs.backend_image_tag }}
+            - Frontend promoted: tejasdesai27/todo-frontend:${{ inputs.frontend_image_tag }}
+            - Infra repo updated — ArgoCD will sync automatically
+            - Environment: prod-todo-app namespace
+            - Status: SUCCESS ✅
