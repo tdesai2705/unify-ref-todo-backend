@@ -1,0 +1,32 @@
+apiVersion: automation.cloudbees.io/v1alpha1
+kind: workflow
+name: Deploy Backend
+
+on:
+  workflow_call:
+    inputs:
+      artifact-id:
+        type: string
+        required: true
+      environment:
+        type: string
+        required: true
+
+jobs:
+  deploy:
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Register backend deployment
+        uses: cloudbees-io/register-deployed-artifact@v1
+        with:
+          artifact-id: ${{ inputs.artifact-id }}
+          target-environment: ${{ inputs.environment }}
+
+      - name: Publish deployment evidence
+        uses: cloudbees-io/publish-evidence-item@v1
+        with:
+          content: |-
+            ## Backend Deployed ✅
+            - Artifact ID: ${{ inputs.artifact-id }}
+            - Environment: ${{ inputs.environment }}
+            - Run ID: ${{ cloudbees.run_id }}
