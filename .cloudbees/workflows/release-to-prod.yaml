@@ -30,8 +30,8 @@ jobs:
           echo "Backend tag from QA : $BACKEND_TAG"
           echo "Frontend tag from QA: $FRONTEND_TAG"
 
-          awk -v tag="$BACKEND_TAG" '{if(/^[[:space:]]*tag:/) printf "  tag: %s\n", tag; else print}' infra/helm/todo-app/envs/prod/backend-values.yaml > /tmp/b.yaml && mv /tmp/b.yaml infra/helm/todo-app/envs/prod/backend-values.yaml
-          awk -v tag="$FRONTEND_TAG" '{if(/^[[:space:]]*tag:/) printf "  tag: %s\n", tag; else print}' infra/helm/todo-app/envs/prod/frontend-values.yaml > /tmp/f.yaml && mv /tmp/f.yaml infra/helm/todo-app/envs/prod/frontend-values.yaml
+          awk -v tag="$BACKEND_TAG" '{if(/^[[:space:]]*tag:/) printf "    tag: %s\n", tag; else print}' infra/helm/todo-app/envs/prod/backend-values.yaml > /tmp/b.yaml && mv /tmp/b.yaml infra/helm/todo-app/envs/prod/backend-values.yaml
+          awk -v tag="$FRONTEND_TAG" '{if(/^[[:space:]]*tag:/) printf "    tag: %s\n", tag; else print}' infra/helm/todo-app/envs/prod/frontend-values.yaml > /tmp/f.yaml && mv /tmp/f.yaml infra/helm/todo-app/envs/prod/frontend-values.yaml
 
           echo "prod/backend-values.yaml:"
           cat infra/helm/todo-app/envs/prod/backend-values.yaml
