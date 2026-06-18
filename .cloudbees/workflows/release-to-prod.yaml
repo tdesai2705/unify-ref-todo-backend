@@ -59,7 +59,7 @@ jobs:
           git config user.email "ci@cloudbees.com"
           git config user.name "CloudBees CI"
           git add helm/todo-app/envs/prod/backend-values.yaml helm/todo-app/envs/prod/frontend-values.yaml
-          git commit -m "Promote backend:${{ steps.read-tags.outputs.BACKEND_TAG }} + frontend:${{ steps.read-tags.outputs.FRONTEND_TAG }} to prod [skip ci]" || echo "No changes to commit"
+          git commit -m "Promote backend:${{ steps.update-values.outputs.BACKEND_TAG }} + frontend:${{ steps.update-values.outputs.FRONTEND_TAG }} to prod [skip ci]" || echo "No changes to commit"
           git push https://${{ secrets.GITHUB_PAT }}@github.com/tdesai2705/unify-ref-todo-infrastructure.git main
 
       - name: Publish deployment evidence
