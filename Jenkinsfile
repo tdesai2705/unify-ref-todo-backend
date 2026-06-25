@@ -127,7 +127,10 @@ spec:
                         sh """
                             mkdir -p test-results
 
-                            SESSION=\$(smart-tests record session --build ${BUILD_NUMBER} --test-suite todo-backend-tests)
+                            SESSION=\$(smart-tests record session \
+                                --build ${BUILD_NUMBER} \
+                                --test-suite todo-backend-tests \
+                                --metadata "due_date_feature=on" "dark_mode=on")
                             echo "Smart Tests session: \$SESSION"
 
                             PYTHONPATH=. pytest tests/ \
