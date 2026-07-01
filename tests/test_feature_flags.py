@@ -52,6 +52,10 @@ def user(app):
 class TestEnhancedStatsFlagOff:
     """Default behaviour — no extra stats fields."""
 
+    @pytest.fixture(autouse=True)
+    def disable_flag(self, monkeypatch):
+        monkeypatch.setenv('FEATURE_ENHANCED_STATS', 'false')
+
     def test_stats_no_overdue_count(self, client):
         response = client.get('/todos/stats')
         assert response.status_code == 200
@@ -122,6 +126,10 @@ class TestEnhancedStatsFlagOn:
 class TestDueDateWarningsFlagOff:
     """Default — todo responses do NOT include overdue or days_until_due."""
 
+    @pytest.fixture(autouse=True)
+    def disable_flag(self, monkeypatch):
+        monkeypatch.setenv('FEATURE_DUE_DATE_WARNINGS', 'false')
+
     def test_get_todos_no_overdue_field(self, client, user, app):
         with app.app_context():
             past = datetime.utcnow() - timedelta(days=1)
@@ -188,6 +196,10 @@ class TestDueDateWarningsFlagOn:
 
 class TestBulkOperationsFlagOff:
     """Default — bulk-complete endpoint returns 404."""
+
+    @pytest.fixture(autouse=True)
+    def disable_flag(self, monkeypatch):
+        monkeypatch.setenv('FEATURE_BULK_OPERATIONS', 'false')
 
     def test_bulk_complete_returns_404(self, client, user):
         client.post('/todos', json={'title': 'T1', 'user_id': user})
