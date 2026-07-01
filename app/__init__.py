@@ -15,6 +15,11 @@ def create_app(config_name='default'):
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+    app.config['CASK_API_KEY'] = os.getenv('CASK_API_KEY', '')
+
+    # Initialize CloudBees Feature Management SDK
+    from app.feature_flags import setup as setup_flags
+    setup_flags(app.config['CASK_API_KEY'])
 
     # Initialize extensions
     db.init_app(app)
