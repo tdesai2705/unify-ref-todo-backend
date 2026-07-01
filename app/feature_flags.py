@@ -1,48 +1,81 @@
 import os
+from rox.server.rox_server import Rox
+from rox.server.flags.rox_flag import RoxFlag
+from rox.server.rox_options import RoxOptions, NetworkConfigurationsOptions
+
+
+class _Flags:
+    def __init__(self):
+        self.enhanced_stats = RoxFlag(False)
+        self.due_date_warnings = RoxFlag(False)
+        self.bulk_operations = RoxFlag(False)
+
+
+_flags = _Flags()
+_setup_done = False
+
+
+def setup(api_key: str):
+    """Connect to CloudBees Feature Management platform.
+
+    Called once at app startup with CASK_API_KEY.
+    No-op if key is empty (local dev / tests → falls back to env vars).
+    """
+    global _setup_done
+    if _setup_done or not api_key:
+        return
+    Rox.register(_flags)
+    options = RoxOptions(network_configuration_options=NetworkConfigurationsOptions(
+        get_config_api_endpoint='https://api.cloudbees.io/device/get_configuration',
+        get_config_cloud_endpoint='https://rox-conf.cloudbees.io',
+        send_state_api_endpoint='https://api.cloudbees.io/device/update_state_store',
+        send_state_cloud_endpoint='https://rox-state.cloudbees.io',
+        analytics_endpoint='https://api.cloudbees.io/events/flag-impressions',
+        push_notification_endpoint='https://api.cloudbees.io/sse',
+    ))
+    Rox.setup(api_key, options).result()
+    _setup_done = True
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, 'false').lower() in ('true', '1', 'yes')
 
 
 class FeatureFlags:
     """
-    Feature flag abstraction for the CloudBees Unify reference architecture.
+    Feature flag abstraction backed by CloudBees Feature Management.
 
-    Current backend: environment variables — zero dependencies, works everywhere.
+    When CASK_API_KEY is set (production / GKE):
+      → Flags are controlled from the Unify FM UI in real time.
+        No redeployment needed to toggle a flag.
 
-    Upgrade path to CloudBees Feature Management SDK:
-    ─────────────────────────────────────────────────
-    Replace is_enabled() with:
+    When CASK_API_KEY is not set (tests / local dev):
+      → Falls back to FEATURE_* environment variables.
+        Existing tests and CI runs work unchanged.
 
-        from cloudbees.feature_management import FeatureManagement
-        _fm = FeatureManagement(sdk_key=os.environ["CB_FM_SDK_KEY"])
+    Flag names match exactly what is registered in Unify FM:
+      enhanced_stats, due_date_warnings, bulk_operations
 
-        @staticmethod
-        def is_enabled(flag: str) -> bool:
-            return _fm.variation(flag, context={"env": os.environ.get("FLASK_ENV", "dev")})
-
-    Everything else — routes, tests, Jenkinsfile, PTS mapping — stays identical.
-    You gain real-time delivery, per-user targeting, gradual rollout %, and audit log.
-
-    Smart Tests note:
-    ─────────────────
-    Each flag below maps to a distinct test class in tests/test_feature_flags.py.
-    After 20+ observation builds, PTS learns this mapping and selects only the
-    relevant test class when code behind a single flag changes.
+    Smart Tests mapping:
+      enhanced_stats    → TestEnhancedStats* tests
+      due_date_warnings → TestDueDateWarnings* tests
+      bulk_operations   → TestBulkOperations* tests
     """
-
-    @staticmethod
-    def is_enabled(flag: str) -> bool:
-        return os.environ.get(flag, "false").lower() in ("true", "1", "yes")
 
     @classmethod
     def enhanced_stats(cls) -> bool:
-        """Stats endpoint: adds overdue_count + by_category. → TestEnhancedStats* tests."""
-        return cls.is_enabled("FEATURE_ENHANCED_STATS")
+        if _setup_done:
+            return _flags.enhanced_stats.is_enabled()
+        return _env_flag('FEATURE_ENHANCED_STATS')
 
     @classmethod
     def due_date_warnings(cls) -> bool:
-        """Todo responses: adds overdue + days_until_due fields. → TestDueDateWarnings* tests."""
-        return cls.is_enabled("FEATURE_DUE_DATE_WARNINGS")
+        if _setup_done:
+            return _flags.due_date_warnings.is_enabled()
+        return _env_flag('FEATURE_DUE_DATE_WARNINGS')
 
     @classmethod
     def bulk_operations(cls) -> bool:
-        """Enables POST /todos/bulk-complete endpoint. → TestBulkOperations* tests."""
-        return cls.is_enabled("FEATURE_BULK_OPERATIONS")
+        if _setup_done:
+            return _flags.bulk_operations.is_enabled()
+        return _env_flag('FEATURE_BULK_OPERATIONS')
