@@ -1,5 +1,27 @@
+// ─────────────────────────────────────────────────────────────────────────────
 // CloudBees CI Pipeline — Todo Backend
-// Build → Smart Tests (PTS) → Docker Push → Infra Repo Update → ArgoCD Sync
+// Reference Architecture: Feature Flags + Predictive Test Selection (PTS)
+//
+// Pipeline stages:
+//   1. Checkout          — clone repo, capture git context
+//   2. Install Deps      — pip + smart-tests-cli (includes Java for PTS)
+//   3. Record Build      — register this build with CloudBees Unify
+//   4. Test              — observation OR subsetting based on SMART_TESTS_OBSERVATION
+//   5. Docker Build+Push — image tagged as <branch>-<build> → Docker Hub
+//   6. Infra Update      — bump image tag in infra repo → ArgoCD auto-syncs QA
+//
+// Feature flag + PTS interaction:
+//   - Flags are CBCI parameters → passed as env vars to pytest
+//   - Each flag has a dedicated test class in test_feature_flags.py
+//   - After 20+ observation runs, PTS maps each flag's code path to its tests
+//   - A commit touching only one flag → PTS selects ~5 tests, not all 35
+//
+// Observation vs Subsetting:
+//   SMART_TESTS_OBSERVATION = true  → run all tests, build the model
+//   SMART_TESTS_OBSERVATION = false → PTS selects minimum tests at 90% confidence
+//
+// See DEMO_GUIDE.md for SE walkthrough. See README.md for architecture details.
+// ─────────────────────────────────────────────────────────────────────────────
 
 pipeline {
     agent {
