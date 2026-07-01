@@ -1,5 +1,5 @@
-// CloudBees CI Pipeline - Todo Backend
-// Build → Test (with Smart Tests) → Push Image → Update Helm Values → ArgoCD Auto-Deploys
+// CloudBees CI Pipeline — Todo Backend
+// Build → Smart Tests (PTS) → Docker Push → Infra Repo Update → ArgoCD Sync
 
 pipeline {
     agent {
@@ -12,10 +12,8 @@ spec:
   containers:
   - name: python
     image: python:3.13-slim
-    command:
-    - sleep
-    args:
-    - 99d
+    command: [sleep]
+    args: [99d]
   - name: docker
     image: docker:24-dind
     securityContext:
@@ -31,10 +29,8 @@ spec:
       mountPath: /var/run
   - name: docker-cli
     image: docker:24-cli
-    command:
-    - sleep
-    args:
-    - 99d
+    command: [sleep]
+    args: [99d]
     env:
     - name: DOCKER_HOST
       value: tcp://localhost:2375
@@ -45,76 +41,65 @@ spec:
         }
     }
 
+    // ── Feature flag parameters ─────────────────────────────────
+    // Toggle each flag per-build from the CBCI UI (Build with Parameters)
+    parameters {
+        booleanParam(name: 'FEATURE_ENHANCED_STATS',    defaultValue: false, description: 'Stats endpoint: adds overdue_count + by_category')
+        booleanParam(name: 'FEATURE_DUE_DATE_WARNINGS', defaultValue: false, description: 'Todo responses: adds overdue + days_until_due fields')
+        booleanParam(name: 'FEATURE_BULK_OPERATIONS',   defaultValue: false, description: 'Enables POST /todos/bulk-complete endpoint')
+        booleanParam(name: 'SMART_TESTS_OBSERVATION',   defaultValue: true,  description: 'Observation mode (ON for first 20+ runs, then turn OFF)')
+    }
+
     options {
-        buildDiscarder(logRotator(
-            numToKeepStr: '10',
-            artifactNumToKeepStr: '5',
-            daysToKeepStr: '30'
-        ))
+        buildDiscarder(logRotator(numToKeepStr: '10', daysToKeepStr: '30'))
     }
 
     environment {
-        APP_NAME = 'todo-backend'
+        APP_NAME        = 'todo-backend'
         DOCKER_REGISTRY = 'docker.io'
-        DOCKER_REPO = 'tejasdesai27'
-        IMAGE_NAME = "${DOCKER_REPO}/${APP_NAME}"
-
-        BRANCH_NAME_CLEAN = "${env.BRANCH_NAME.replaceAll('/', '-')}"
-        IMAGE_TAG = "${BRANCH_NAME_CLEAN}-${BUILD_NUMBER}"
-
-        INFRA_REPO = 'https://github.com/tdesai2705/unify-ref-todo-infrastructure.git'
-
-        LAUNCHABLE_ORGANIZATION = 'tejas'
-        LAUNCHABLE_WORKSPACE = 'tejas'
+        DOCKER_REPO     = 'tejasdesai27'
+        IMAGE_NAME      = "${DOCKER_REPO}/${APP_NAME}"
+        IMAGE_TAG       = "${env.BRANCH_NAME?.replaceAll('/', '-')}-${BUILD_NUMBER}"
+        INFRA_REPO      = 'https://github.com/tdesai2705/unify-ref-todo-infrastructure.git'
     }
 
     stages {
-        stage('Setup') {
-            steps {
-                container('python') {
-                    echo "Setting up workspace..."
-                    sh """
-                        echo "Build: ${BUILD_NUMBER}"
-                        echo "Branch: ${BRANCH_NAME}"
-                        echo "Image Tag: ${IMAGE_TAG}"
-                    """
-                }
-            }
-        }
 
         stage('Checkout') {
             steps {
-                echo "Checking out code from branch: ${env.BRANCH_NAME}"
                 checkout scm
                 script {
                     env.GIT_COMMIT_SHORT = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
                 }
+                echo "Branch: ${env.BRANCH_NAME} | Commit: ${env.GIT_COMMIT_SHORT} | Build: ${BUILD_NUMBER}"
             }
         }
 
         stage('Install Dependencies') {
             steps {
                 container('python') {
-                    sh """
-                        apt-get update && apt-get install -y --no-install-recommends default-jre-headless git
+                    sh '''
+                        apt-get update -qq
+                        apt-get install -y --no-install-recommends default-jre-headless git curl
                         pip install --no-cache-dir -r requirements.txt
-                        pip install smart-tests-cli==2.11.2
-                    """
+                        pip install --no-cache-dir "smart-tests-cli~=2.0"
+                        smart-tests --version
+                    '''
                 }
             }
         }
 
-        stage('Smart Tests - Record Build') {
+        stage('Smart Tests — Record Build') {
             steps {
                 container('python') {
                     withCredentials([string(credentialsId: 'SMART_TESTS_TOKEN', variable: 'SMART_TESTS_TOKEN')]) {
-                        sh """
+                        sh '''
                             git config --global --add safe.directory ${WORKSPACE}
                             smart-tests verify || true
                             smart-tests record build \
-                                --build ${BUILD_NUMBER} \
+                                --build ${BUILD_TAG} \
                                 --source .
-                        """
+                        '''
                     }
                 }
             }
@@ -124,30 +109,73 @@ spec:
             steps {
                 container('python') {
                     withCredentials([string(credentialsId: 'SMART_TESTS_TOKEN', variable: 'SMART_TESTS_TOKEN')]) {
-                        sh """
-                            mkdir -p test-results
+                        script {
+                            def obsFlag = params.SMART_TESTS_OBSERVATION ? '--observation' : ''
+                            def featureEnv = """
+                                FEATURE_ENHANCED_STATS=${params.FEATURE_ENHANCED_STATS}
+                                FEATURE_DUE_DATE_WARNINGS=${params.FEATURE_DUE_DATE_WARNINGS}
+                                FEATURE_BULK_OPERATIONS=${params.FEATURE_BULK_OPERATIONS}
+                            """.trim()
 
-                            SESSION=\$(smart-tests record session \
-                                --build ${BUILD_NUMBER} \
-                                --test-suite todo-backend-tests \
-                                --metadata "due_date_feature=on" "dark_mode=on")
-                            echo "Smart Tests session: \$SESSION"
+                            sh """
+                                mkdir -p test-results
 
-                            PYTHONPATH=. pytest tests/ \
-                                --junit-xml=test-results/results.xml \
-                                --cov=app \
-                                --cov-report=xml:test-results/coverage.xml \
-                                -v || true
+                                # Step 1: Create Smart Tests session
+                                smart-tests record session \\
+                                    --build ${BUILD_TAG} \\
+                                    --test-suite todo-backend-tests \\
+                                    ${obsFlag} \\
+                                    > session.txt
 
-                            smart-tests record tests \
-                                --session \$SESSION \
-                                pytest test-results/results.xml
-                        """
+                                echo "Session: \$(cat session.txt)"
+                                echo "Observation mode: ${params.SMART_TESTS_OBSERVATION}"
+                                echo "Feature flags: enhanced_stats=${params.FEATURE_ENHANCED_STATS} due_date=${params.FEATURE_DUE_DATE_WARNINGS} bulk=${params.FEATURE_BULK_OPERATIONS}"
+
+                                # Step 2a: Observation — run all tests
+                                if [ "${params.SMART_TESTS_OBSERVATION}" = "true" ]; then
+                                    FEATURE_ENHANCED_STATS=${params.FEATURE_ENHANCED_STATS} \\
+                                    FEATURE_DUE_DATE_WARNINGS=${params.FEATURE_DUE_DATE_WARNINGS} \\
+                                    FEATURE_BULK_OPERATIONS=${params.FEATURE_BULK_OPERATIONS} \\
+                                    PYTHONPATH=. pytest tests/ \\
+                                        --junitxml=test-results/results.xml \\
+                                        -v
+
+                                # Step 2b: Subset — PTS selects which tests to run
+                                else
+                                    PYTHONPATH=. pytest tests/ --collect-only -q \\
+                                        | grep '::' \\
+                                        | smart-tests subset pytest \\
+                                            --session @session.txt \\
+                                            --confidence 90% \\
+                                            > subset.txt
+
+                                    echo "Smart Tests selected \$(wc -l < subset.txt) of 35 tests:"
+                                    cat subset.txt
+
+                                    FEATURE_ENHANCED_STATS=${params.FEATURE_ENHANCED_STATS} \\
+                                    FEATURE_DUE_DATE_WARNINGS=${params.FEATURE_DUE_DATE_WARNINGS} \\
+                                    FEATURE_BULK_OPERATIONS=${params.FEATURE_BULK_OPERATIONS} \\
+                                    PYTHONPATH=. pytest tests/ \\
+                                        --junitxml=test-results/results.xml \\
+                                        -v \\
+                                        \$(cat subset.txt)
+                                fi
+                            """
+                        }
                     }
                 }
             }
             post {
                 always {
+                    container('python') {
+                        withCredentials([string(credentialsId: 'SMART_TESTS_TOKEN', variable: 'SMART_TESTS_TOKEN')]) {
+                            sh '''
+                                smart-tests record tests pytest \
+                                    --session @session.txt \
+                                    test-results/results.xml
+                            '''
+                        }
+                    }
                     junit 'test-results/results.xml'
                 }
             }
@@ -156,75 +184,50 @@ spec:
         stage('Docker Build & Push') {
             steps {
                 container('docker-cli') {
-                    echo "Building and pushing Docker image..."
-                    script {
-                        withCredentials([usernamePassword(
-                            credentialsId: 'dockerhub-credentials',
-                            usernameVariable: 'DOCKER_USER',
-                            passwordVariable: 'DOCKER_PASS'
-                        )]) {
-                            sh """
-                                echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin ${DOCKER_REGISTRY}
-
-                                docker build --platform linux/amd64 -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                                docker push ${IMAGE_NAME}:${IMAGE_TAG}
-
-                                docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:${BRANCH_NAME_CLEAN}-latest
-                                docker push ${IMAGE_NAME}:${BRANCH_NAME_CLEAN}-latest
-
-                                echo "Image pushed: ${IMAGE_NAME}:${IMAGE_TAG}"
-                            """
-                        }
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        sh """
+                            echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin ${DOCKER_REGISTRY}
+                            docker build --platform linux/amd64 -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                            docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                            docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
+                            docker push ${IMAGE_NAME}:latest
+                        """
                     }
                 }
             }
         }
 
-        stage('Update Infrastructure Repo') {
+        stage('Update Infrastructure → ArgoCD Sync') {
             steps {
                 container('python') {
-                    echo "Updating infrastructure repo with new image tag..."
-                    script {
-                        withCredentials([string(
-                            credentialsId: 'github-pat',
-                            variable: 'GITHUB_TOKEN'
-                        )]) {
-                            sh """
-                                apt-get update && apt-get install -y git
+                    withCredentials([string(credentialsId: 'github-pat', variable: 'GITHUB_TOKEN')]) {
+                        sh """
+                            git config --global user.email "ci@cloudbees.com"
+                            git config --global user.name "CloudBees CI"
 
-                                git config --global user.email "ci@cloudbees.com"
-                                git config --global user.name "CloudBees CI"
+                            git clone https://\$GITHUB_TOKEN@github.com/tdesai2705/unify-ref-todo-infrastructure.git infra
+                            cd infra
 
-                                git clone https://\$GITHUB_TOKEN@github.com/tdesai2705/unify-ref-todo-infrastructure.git infra
-                                cd infra
+                            ENV=\$([ "${env.BRANCH_NAME}" = "main" ] && echo "qa" || echo "dev")
+                            echo "Deploying to: \$ENV | Image: ${IMAGE_TAG}"
 
-                                if [ "${env.BRANCH_NAME}" = "develop" ]; then
-                                    ENV="dev"
-                                elif [ "${env.BRANCH_NAME}" = "main" ]; then
-                                    ENV="qa"
-                                else
-                                    ENV="dev"
-                                fi
+                            sed -i "s|tag: .*|tag: ${IMAGE_TAG}|" helm/todo-app/envs/\${ENV}/backend-values.yaml
+                            cat helm/todo-app/envs/\${ENV}/backend-values.yaml
 
-                                echo "Updating \${ENV} environment with image tag: ${IMAGE_TAG}"
+                            git add .
+                            git commit -m "ci: update backend to ${IMAGE_TAG} [skip ci]" || echo "No changes"
 
-                                sed -i "s|tag: .*|tag: ${IMAGE_TAG}|" helm/todo-app/envs/\${ENV}/backend-values.yaml
+                            for i in 1 2 3; do
+                                git pull --rebase origin main && git push origin main && break
+                                sleep 5
+                            done
 
-                                echo "Updated values file:"
-                                cat helm/todo-app/envs/\${ENV}/backend-values.yaml
-
-                                git add helm/todo-app/envs/\${ENV}/backend-values.yaml
-                                git commit -m "Update backend image to ${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
-
-                                for i in 1 2 3 4 5; do
-                                    git pull --rebase origin main && git push origin main && break
-                                    echo "Push attempt \$i failed, retrying in 5s..."
-                                    sleep 5
-                                done
-
-                                echo "Infrastructure repo updated. ArgoCD will sync automatically."
-                            """
-                        }
+                            echo "ArgoCD will auto-sync within 3 minutes."
+                        """
                     }
                 }
             }
@@ -233,11 +236,10 @@ spec:
 
     post {
         success {
-            echo "Backend pipeline completed successfully!"
-            echo "Build: ${BUILD_NUMBER} | Branch: ${env.BRANCH_NAME} | Image: ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "✅ Pipeline done | Build: ${BUILD_NUMBER} | Image: ${IMAGE_NAME}:${IMAGE_TAG}"
         }
         failure {
-            echo "Backend pipeline failed!"
+            echo "❌ Pipeline failed at build ${BUILD_NUMBER}"
         }
     }
 }
