@@ -144,6 +144,7 @@ def bulk_complete():
         'count': len(updated),
         'skipped': skipped,
         'total_requested': len(todo_ids),
+        'success_rate': round(len(updated) / len(todo_ids) * 100, 1) if todo_ids else 0,
     }), 200
 
 
