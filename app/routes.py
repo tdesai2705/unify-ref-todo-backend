@@ -2,7 +2,6 @@ from flask import Blueprint, request, jsonify
 from app import db
 from app.models import User, Todo
 from app.feature_flags import FeatureFlags
-from app.bulk_ops import execute_bulk_complete
 from datetime import datetime, timezone
 
 bp = Blueprint('api', __name__)
@@ -135,6 +134,7 @@ def bulk_complete():
     if not todo_ids:
         return jsonify({'error': 'todo_ids must not be empty'}), 400
 
+    from app.bulk_ops import execute_bulk_complete  # lazy: not in static deps
     return jsonify(execute_bulk_complete(todo_ids, db, Todo)), 200
 
 
