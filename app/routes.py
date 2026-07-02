@@ -140,14 +140,15 @@ def bulk_complete():
             todo.completed = True
             updated.append(tid)
 
-    skipped = [tid for tid in todo_ids if tid not in updated]
+    not_found = [tid for tid in todo_ids if tid not in updated]
     db.session.commit()
     return jsonify({
         'completed': updated,
         'count': len(updated),
-        'skipped': skipped,
+        'skipped': not_found,
         'total_requested': len(todo_ids),
         'success_rate': round(len(updated) / len(todo_ids) * 100, 1) if todo_ids else 0,
+        'not_found_count': len(not_found),
     }), 200
 
 
