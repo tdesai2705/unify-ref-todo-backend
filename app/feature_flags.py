@@ -9,6 +9,7 @@ class _Flags:
         self.enhanced_stats = RoxFlag(False)
         self.due_date_warnings = RoxFlag(False)
         self.bulk_operations = RoxFlag(False)
+        self.priority_filter = RoxFlag(False)
 
 
 _flags = _Flags()
@@ -79,3 +80,9 @@ class FeatureFlags:
         if _setup_done:
             return _flags.bulk_operations.is_enabled()
         return _env_flag('FEATURE_BULK_OPERATIONS')
+
+    @classmethod
+    def priority_filter(cls) -> bool:
+        if _setup_done:
+            return _flags.priority_filter.is_enabled()
+        return _env_flag('FEATURE_PRIORITY_FILTER')
