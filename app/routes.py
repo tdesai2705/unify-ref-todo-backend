@@ -139,7 +139,12 @@ def bulk_complete():
 
     skipped = [tid for tid in todo_ids if tid not in updated]
     db.session.commit()
-    return jsonify({'completed': updated, 'count': len(updated), 'skipped': skipped}), 200
+    return jsonify({
+        'completed': updated,
+        'count': len(updated),
+        'skipped': skipped,
+        'total_requested': len(todo_ids),
+    }), 200
 
 
 # ── Stats ─────────────────────────────────────────────────────
