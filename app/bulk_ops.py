@@ -1,4 +1,4 @@
-def execute_bulk_complete(todo_ids, db, Todo):
+def execute_bulk_complete(todo_ids, db, Todo):  # bulk feature v2
     """Mark multiple todos completed. db and Todo passed in to avoid Flask imports."""
     updated = []
     for tid in todo_ids:
