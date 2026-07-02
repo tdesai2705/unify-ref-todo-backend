@@ -16,6 +16,7 @@ def _todo_dict(todo):
         data['overdue'] = delta < 0
         data['days_until_due'] = delta
         data['urgency'] = 'critical' if delta < 0 else ('warning' if delta <= 2 else 'ok')
+        data['overdue_label'] = 'OVERDUE' if delta < 0 else ''
     return data
 
 
