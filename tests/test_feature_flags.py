@@ -238,9 +238,9 @@ class TestBulkOperationsFlagOn:
         response = client.post('/todos/bulk-complete', json={'todo_ids': [t1['id'], 9999]})
         assert response.status_code == 200
         data = response.get_json()
-        # Only existing todo gets completed
         assert data['count'] == 1
         assert t1['id'] in data['completed']
+        assert 9999 in data['skipped']
 
     def test_bulk_complete_empty_list_returns_400(self, client):
         response = client.post('/todos/bulk-complete', json={'todo_ids': []})
