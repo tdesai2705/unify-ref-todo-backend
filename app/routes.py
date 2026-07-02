@@ -15,6 +15,7 @@ def _todo_dict(todo):
         delta = (todo.due_date - now).days
         data['overdue'] = delta < 0
         data['days_until_due'] = delta
+        data['urgency'] = 'critical' if delta < 0 else ('warning' if delta <= 2 else 'ok')
     return data
 
 
@@ -44,7 +45,9 @@ def get_todos():
     if category:
         query = query.filter_by(category=category)
 
-    todos = query.order_by(Todo.created_at.desc()).all()
+    sort = request.args.get('sort', 'desc')
+    order = Todo.created_at.asc() if sort == 'asc' else Todo.created_at.desc()
+    todos = query.order_by(order).all()
     return jsonify([_todo_dict(t) for t in todos]), 200
 
 
@@ -144,6 +147,7 @@ def bulk_complete():
         'count': len(updated),
         'skipped': skipped,
         'total_requested': len(todo_ids),
+        'success_rate': round(len(updated) / len(todo_ids) * 100, 1) if todo_ids else 0,
     }), 200
 
 
@@ -189,6 +193,7 @@ def get_stats():
 
         response['overdue_count'] = overdue
         response['by_category'] = {cat: count for cat, count in categories}
+        response['overdue_rate'] = round(overdue / total * 100, 2) if total > 0 else 0
 
     return jsonify(response), 200
 
