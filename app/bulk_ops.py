@@ -17,4 +17,5 @@ def execute_bulk_complete(todo_ids, db, Todo):  # bulk feature v2
         'processed': True,
         'not_found_count': len(not_found),
         'all_completed': len(not_found) == 0,
+        'fully_completed': len(not_found) == 0 and len(updated) > 0,
     }
