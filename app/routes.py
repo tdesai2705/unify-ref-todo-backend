@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from app import db
 from app.models import User, Todo
 from app.feature_flags import FeatureFlags
+from app.bulk_ops import execute_bulk_complete
 from datetime import datetime, timezone
 
 bp = Blueprint('api', __name__)
@@ -134,23 +135,7 @@ def bulk_complete():
     if not todo_ids:
         return jsonify({'error': 'todo_ids must not be empty'}), 400
 
-    updated = []
-    for tid in todo_ids:
-        todo = Todo.query.get(tid)
-        if todo:
-            todo.completed = True
-            updated.append(tid)
-
-    skipped = [tid for tid in todo_ids if tid not in updated]
-    db.session.commit()
-    return jsonify({
-        'completed': updated,
-        'count': len(updated),
-        'skipped': skipped,
-        'total_requested': len(todo_ids),
-        'success_rate': round(len(updated) / len(todo_ids) * 100, 1) if todo_ids else 0,
-        'processed': True,
-    }), 200
+    return jsonify(execute_bulk_complete(todo_ids, db, Todo)), 200
 
 
 # ── Stats ─────────────────────────────────────────────────────
