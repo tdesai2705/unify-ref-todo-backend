@@ -190,6 +190,7 @@ def get_stats():
 
         response['overdue_count'] = overdue
         response['by_category'] = {cat: count for cat, count in categories}
+        response['overdue_rate'] = round(overdue / total * 100, 2) if total > 0 else 0
 
     return jsonify(response), 200
 
