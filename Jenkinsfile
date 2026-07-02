@@ -177,10 +177,9 @@ spec:
                                     FEATURE_ENHANCED_STATS=${params.FEATURE_ENHANCED_STATS} \\
                                     FEATURE_DUE_DATE_WARNINGS=${params.FEATURE_DUE_DATE_WARNINGS} \\
                                     FEATURE_BULK_OPERATIONS=${params.FEATURE_BULK_OPERATIONS} \\
-                                    PYTHONPATH=. pytest tests/ \\
+                                    PYTHONPATH=. pytest \$(cat subset.txt) \\
                                         --junitxml=test-results/results.xml \\
-                                        -v \\
-                                        \$(cat subset.txt)
+                                        -v
                                 fi
                             """
                         }
