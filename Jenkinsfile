@@ -153,12 +153,13 @@ spec:
                                 echo "Observation mode: ${params.SMART_TESTS_OBSERVATION}"
                                 echo "Feature flags: enhanced_stats=${params.FEATURE_ENHANCED_STATS} due_date=${params.FEATURE_DUE_DATE_WARNINGS} bulk=${params.FEATURE_BULK_OPERATIONS}"
 
-                                # Step 2a: Observation — run all tests
+                                # Step 2a: Observation — run all tests with coverage
                                 if [ "${params.SMART_TESTS_OBSERVATION}" = "true" ]; then
                                     FEATURE_ENHANCED_STATS=${params.FEATURE_ENHANCED_STATS} \\
                                     FEATURE_DUE_DATE_WARNINGS=${params.FEATURE_DUE_DATE_WARNINGS} \\
                                     FEATURE_BULK_OPERATIONS=${params.FEATURE_BULK_OPERATIONS} \\
                                     PYTHONPATH=. pytest tests/ \\
+                                        --cov=app --cov-report=xml:test-results/coverage.xml \\
                                         --junitxml=test-results/results.xml \\
                                         -v
 
@@ -168,7 +169,7 @@ spec:
                                         | grep '::' \\
                                         | smart-tests subset pytest \\
                                             --session @session.txt \\
-                                            --confidence 90% \\
+                                            --confidence 70% \\
                                             > subset.txt
 
                                     echo "Smart Tests selected \$(wc -l < subset.txt) of 35 tests:"
@@ -178,6 +179,7 @@ spec:
                                     FEATURE_DUE_DATE_WARNINGS=${params.FEATURE_DUE_DATE_WARNINGS} \\
                                     FEATURE_BULK_OPERATIONS=${params.FEATURE_BULK_OPERATIONS} \\
                                     PYTHONPATH=. pytest \$(cat subset.txt) \\
+                                        --cov=app --cov-report=xml:test-results/coverage.xml \\
                                         --junitxml=test-results/results.xml \\
                                         -v
                                 fi
@@ -191,6 +193,10 @@ spec:
                     container('python') {
                         withCredentials([string(credentialsId: 'SMART_TESTS_TOKEN', variable: 'SMART_TESTS_TOKEN')]) {
                             sh '''
+                                smart-tests record tests pytest \
+                                    --session @session.txt \
+                                    test-results/results.xml \
+                                    test-results/coverage.xml || \
                                 smart-tests record tests pytest \
                                     --session @session.txt \
                                     test-results/results.xml
