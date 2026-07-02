@@ -15,6 +15,7 @@ def _todo_dict(todo):
         delta = (todo.due_date - now).days
         data['overdue'] = delta < 0
         data['days_until_due'] = delta
+        data['urgency'] = 'critical' if delta < 0 else ('warning' if delta <= 2 else 'ok')
     return data
 
 
