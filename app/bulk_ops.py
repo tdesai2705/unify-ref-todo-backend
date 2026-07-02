@@ -16,4 +16,5 @@ def execute_bulk_complete(todo_ids, db, Todo):
         'success_rate': round(len(updated) / len(todo_ids) * 100, 1) if todo_ids else 0,
         'processed': True,
         'not_found_count': len(not_found),
+        'all_completed': len(not_found) == 0,
     }
