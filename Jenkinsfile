@@ -69,7 +69,7 @@ spec:
         booleanParam(name: 'FEATURE_ENHANCED_STATS',    defaultValue: false, description: 'Stats endpoint: adds overdue_count + by_category')
         booleanParam(name: 'FEATURE_DUE_DATE_WARNINGS', defaultValue: false, description: 'Todo responses: adds overdue + days_until_due fields')
         booleanParam(name: 'FEATURE_BULK_OPERATIONS',   defaultValue: false, description: 'Enables POST /todos/bulk-complete endpoint')
-        booleanParam(name: 'SMART_TESTS_OBSERVATION',   defaultValue: false, description: 'Observation mode (ON for first 20+ runs, then turn OFF)')
+        booleanParam(name: 'SMART_TESTS_OBSERVATION',   defaultValue: true, description: 'Observation mode (ON for first 20+ runs, then turn OFF)')
     }
 
     options {
