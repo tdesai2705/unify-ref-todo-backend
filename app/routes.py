@@ -45,7 +45,9 @@ def get_todos():
     if category:
         query = query.filter_by(category=category)
 
-    todos = query.order_by(Todo.created_at.desc()).all()
+    sort = request.args.get('sort', 'desc')
+    order = Todo.created_at.asc() if sort == 'asc' else Todo.created_at.desc()
+    todos = query.order_by(order).all()
     return jsonify([_todo_dict(t) for t in todos]), 200
 
 
