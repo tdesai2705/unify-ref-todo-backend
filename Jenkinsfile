@@ -252,6 +252,55 @@ spec:
                                 > dt-results/bom.xml
                             ls -lh dt-results/bom.xml || { echo "SBOM generation failed"; exit 0; }
 
+                            echo "=== Injecting known CPE identifiers for internal NVD matching ==="
+                            # OSS Index (PyPI-aware analyzer) has no username configured on this DT
+                            # instance, so it skips every scan. DT's internal CPE-based analyzer is
+                            # enabled and its NVD mirror already has these CVEs -- it just never gets
+                            # a CPE to match against from a plain requirements.txt SBOM. Inject the
+                            # correct vendor:product (pulled from this DT's own NVD data) for the
+                            # packages we track for this demo.
+                            python3 - <<'PYEOF'
+import xml.etree.ElementTree as ET
+
+NS = "http://cyclonedx.org/schema/bom/1.6"
+ET.register_namespace("", NS)
+TAG = "{" + NS + "}"
+PATH = "dt-results/bom.xml"
+
+CPE_MAP = {
+    "pyyaml": ("pyyaml", "pyyaml"),
+    "requests": ("python", "requests"),
+    "urllib3": ("python", "urllib3"),
+}
+
+tree = ET.parse(PATH)
+root = tree.getroot()
+injected = 0
+
+for component in root.iter(TAG + "component"):
+    name_el = component.find(TAG + "name")
+    version_el = component.find(TAG + "version")
+    if name_el is None or version_el is None or name_el.text is None:
+        continue
+    mapping = CPE_MAP.get(name_el.text.strip().lower())
+    if mapping is None:
+        continue
+    vendor, product = mapping
+    cpe_value = "cpe:2.3:a:" + vendor + ":" + product + ":" + version_el.text.strip() + ":*:*:*:*:*:*:*"
+    cpe_el = ET.Element(TAG + "cpe")
+    cpe_el.text = cpe_value
+    purl_el = component.find(TAG + "purl")
+    if purl_el is not None:
+        component.insert(list(component).index(purl_el), cpe_el)
+    else:
+        component.append(cpe_el)
+    injected += 1
+    print("Injected CPE for " + name_el.text + " " + version_el.text + " -> " + cpe_value)
+
+tree.write(PATH, encoding="UTF-8", xml_declaration=True)
+print("Total CPEs injected: " + str(injected))
+PYEOF
+
                             echo "=== Uploading SBOM to Dependency-Track ==="
                             base64 -w 0 dt-results/bom.xml > dt-results/bom-b64.txt
                             cat > dt-results/dt-payload.json <<PAYLOAD
@@ -288,16 +337,24 @@ PAYLOAD
                                 echo "Project UUID: ${PROJECT_UUID}"
 
                                 if [ -n "${PROJECT_UUID}" ]; then
-                                    curl -s -H "X-Api-Key: ${DT_API_KEY}" \
-                                      "${DT_URL}/api/v1/finding/project/${PROJECT_UUID}" \
-                                      > dt-results/dt-findings.json
-                                    echo "Findings: $(grep -c '"vulnerability"' dt-results/dt-findings.json || echo 0)"
+                                    # Internal analyzer can lag slightly behind the "processing" flag,
+                                    # so retry a few times before accepting a zero count.
+                                    for j in 1 2 3; do
+                                        curl -s -H "X-Api-Key: ${DT_API_KEY}" \
+                                          "${DT_URL}/api/v1/finding/project/${PROJECT_UUID}" \
+                                          > dt-results/dt-findings.json
+                                        COUNT=$(grep -c '"vulnerability"' dt-results/dt-findings.json)
+                                        echo "  [retry ${j}/3] Findings: ${COUNT}"
+                                        [ "${COUNT}" != "0" ] && break
+                                        sleep 10
+                                    done
+                                    echo "Findings: ${COUNT}"
                                 fi
                             fi
 
                             echo "=== Building SARIF from findings ==="
                             python3 - <<'PYEOF'
-import json, sys
+import json
 
 DT_URL = "http://dependency-track.34.75.0.106.nip.io"
 findings_file = "dt-results/dt-findings.json"
@@ -316,21 +373,36 @@ for f in findings[:100]:
     comp = f.get("component", {})
     sev = (vuln.get("severity") or "UNASSIGNED").lower()
     level = "error" if sev in ("critical", "high") else ("warning" if sev == "medium" else "note")
-    rule_id = "dt/" + str(vuln.get("vulnId") or "unknown").replace('"', '\\"')
-    msg = (str(vuln.get("title") or vuln.get("vulnId") or "Vulnerability")
-           .replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n"))
-    msg += " in " + str(comp.get("name") or "unknown") + ":" + str(comp.get("version") or "") + " — " + sev.upper()
-    results.append('{"ruleId":"' + rule_id + '","level":"' + level + '","message":{"text":"' + msg + '"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"requirements.txt"}}}]}')
+    rule_id = "dt/" + str(vuln.get("vulnId") or "unknown")
+    title = str(vuln.get("title") or vuln.get("vulnId") or "Vulnerability")
+    msg = title + " in " + str(comp.get("name") or "unknown") + ":" + str(comp.get("version") or "") + " - " + sev.upper()
+    results.append({
+        "ruleId": rule_id,
+        "level": level,
+        "message": {"text": msg},
+        "locations": [{"physicalLocation": {"artifactLocation": {"uri": "requirements.txt"}}}],
+    })
 
 if not results:
-    results.append('{"ruleId":"dependency-track/scan-clean","level":"note","message":{"text":"Dependency-Track SBOM analysis complete. No vulnerabilities found."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"requirements.txt"}}}]}')
+    results.append({
+        "ruleId": "dependency-track/scan-clean",
+        "level": "note",
+        "message": {"text": "Dependency-Track SBOM analysis complete. No vulnerabilities found."},
+        "locations": [{"physicalLocation": {"artifactLocation": {"uri": "requirements.txt"}}}],
+    })
 
-sarif = ('{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",'
-         '"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Dependency-Track","informationUri":"' + DT_URL + '","version":"1.0.0"}},'
-         '"results":[' + ','.join(results) + ']}]}')
+sarif = {
+    "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+    "version": "2.1.0",
+    "runs": [{
+        "tool": {"driver": {"name": "Dependency-Track", "informationUri": DT_URL, "version": "1.0.0"}},
+        "results": results,
+    }],
+}
 
-open(sarif_file, "w").write(sarif)
-print(f"SARIF written ({len(sarif)} bytes, {len(results)} findings)")
+content = json.dumps(sarif)
+open(sarif_file, "w").write(content)
+print("SARIF written (" + str(len(content)) + " bytes, " + str(len(results)) + " findings)")
 PYEOF
                             exit 0
                         '''
