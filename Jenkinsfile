@@ -370,35 +370,74 @@ try:
 except Exception:
     findings = []
 
+SEVERITY_SCORE = {"critical": "9.5", "high": "7.5", "medium": "5.0", "low": "2.0", "unassigned": "0.0"}
+
+rules_by_id = {}
 results = []
 for f in findings[:100]:
     vuln = f.get("vulnerability", {})
     comp = f.get("component", {})
     sev = (vuln.get("severity") or "UNASSIGNED").lower()
     level = "error" if sev in ("critical", "high") else ("warning" if sev == "medium" else "note")
-    rule_id = "dt/" + str(vuln.get("vulnId") or "unknown")
-    title = str(vuln.get("title") or vuln.get("vulnId") or "Vulnerability")
-    msg = title + " in " + str(comp.get("name") or "unknown") + ":" + str(comp.get("version") or "") + " - " + sev.upper()
+    vuln_id = str(vuln.get("vulnId") or "unknown")
+    rule_id = "dt/" + vuln_id
+    comp_label = str(comp.get("name") or "unknown") + ":" + str(comp.get("version") or "")
+    msg = vuln_id + " in " + comp_label + " - " + sev.upper()
+
+    if rule_id not in rules_by_id:
+        cvss = vuln.get("cvssV3BaseScore") or vuln.get("cvssV2BaseScore")
+        security_severity = str(cvss) if cvss is not None else SEVERITY_SCORE.get(sev, "0.0")
+        tags = ["security", "dependency-track", sev]
+        cwe_id = vuln.get("cweId")
+        if cwe_id:
+            tags.append("external/cwe/cwe-" + str(cwe_id))
+        description = str(vuln.get("description") or vuln_id)
+        rules_by_id[rule_id] = {
+            "id": rule_id,
+            "name": vuln_id,
+            "shortDescription": {"text": vuln_id + " (" + sev.upper() + ")"},
+            "fullDescription": {"text": description[:500]},
+            "helpUri": "https://nvd.nist.gov/vuln/detail/" + vuln_id,
+            "help": {"text": description[:1000]},
+            "defaultConfiguration": {"level": level},
+            "properties": {"tags": tags, "security-severity": security_severity, "precision": "high"},
+        }
+
     results.append({
         "ruleId": rule_id,
         "level": level,
-        "message": {"text": msg},
-        "locations": [{"physicalLocation": {"artifactLocation": {"uri": "requirements.txt"}}}],
+        "message": {"text": msg + " (component: " + comp_label + ")"},
+        "locations": [{"physicalLocation": {
+            "artifactLocation": {"uri": "requirements.txt"},
+            "region": {"startLine": 1},
+        }}],
     })
 
 if not results:
+    rules_by_id["dependency-track/scan-clean"] = {
+        "id": "dependency-track/scan-clean",
+        "name": "scan-clean",
+        "shortDescription": {"text": "No vulnerabilities found"},
+        "defaultConfiguration": {"level": "note"},
+        "properties": {"tags": ["security", "dependency-track"]},
+    }
     results.append({
         "ruleId": "dependency-track/scan-clean",
         "level": "note",
         "message": {"text": "Dependency-Track SBOM analysis complete. No vulnerabilities found."},
-        "locations": [{"physicalLocation": {"artifactLocation": {"uri": "requirements.txt"}}}],
+        "locations": [{"physicalLocation": {"artifactLocation": {"uri": "requirements.txt"}, "region": {"startLine": 1}}}],
     })
 
 sarif = {
     "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
     "version": "2.1.0",
     "runs": [{
-        "tool": {"driver": {"name": "Dependency-Track", "informationUri": DT_URL, "version": "1.0.0"}},
+        "tool": {"driver": {
+            "name": "Dependency-Track",
+            "informationUri": DT_URL,
+            "version": "1.0.0",
+            "rules": list(rules_by_id.values()),
+        }},
         "results": results,
     }],
 }
