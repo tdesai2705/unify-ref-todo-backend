@@ -451,12 +451,18 @@ PYEOF
                     }
                 }
                 archiveArtifacts artifacts: 'dt-results/**', allowEmptyArchive: true
+                // registerSecurityScan (with archive:true, which actually parses the SARIF
+                // instead of silently no-op'ing) looks for the artifact relative to the
+                // workspace root regardless of the path given -- a subdirectory path like
+                // dt-results/foo.sarif fails with "Could not export SARIF report". Copy to
+                // workspace root first to work around it.
+                sh 'cp dt-results/dependency-track-scan.sarif dependency-track-scan.sarif'
                 script {
                     try {
                         registerSecurityScan(
-                            artifacts: 'dt-results/dependency-track-scan.sarif',
+                            artifacts: 'dependency-track-scan.sarif',
                             format: 'sarif',
-                            scanner: 'Checkov',
+                            scanner: 'Dependency-Track',
                             archive: true
                         )
                         echo "✅ DT findings registered with CloudBees Unify"
