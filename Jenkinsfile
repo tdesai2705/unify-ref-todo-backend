@@ -58,10 +58,25 @@ kind: Pod
 spec:
   serviceAccountName: jenkins-agents
   containers:
+  - name: jnlp
+    resources:
+      requests:
+        cpu: "10m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
   - name: python
     image: python:3.13-slim
     command: [sleep]
     args: [99d]
+    resources:
+      requests:
+        cpu: "10m"
+        memory: "256Mi"
+      limits:
+        cpu: "1"
+        memory: "1Gi"
   - name: docker
     image: docker:24-dind
     securityContext:
@@ -72,6 +87,13 @@ spec:
     env:
     - name: DOCKER_TLS_CERTDIR
       value: ""
+    resources:
+      requests:
+        cpu: "10m"
+        memory: "256Mi"
+      limits:
+        cpu: "1"
+        memory: "1Gi"
     volumeMounts:
     - name: docker-socket
       mountPath: /var/run
@@ -82,6 +104,13 @@ spec:
     env:
     - name: DOCKER_HOST
       value: tcp://localhost:2375
+    resources:
+      requests:
+        cpu: "10m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
   volumes:
   - name: docker-socket
     emptyDir: {}
