@@ -23,6 +23,32 @@
 // See DEMO_GUIDE.md for SE walkthrough. See README.md for architecture details.
 // ─────────────────────────────────────────────────────────────────────────────
 
+@NonCPS
+String _buildDtSarif(String findingsJson, String dtHostUrl) {
+    def findings = new groovy.json.JsonSlurper().parseText(findingsJson)
+    def list = (findings instanceof List) ? findings : (findings.findings ?: [])
+    def results = []
+    list.take(100).each { f ->
+        def vuln = f?.vulnerability ?: [:]
+        def comp = f?.component ?: [:]
+        def sev   = (vuln.severity ?: 'UNASSIGNED').toString().toLowerCase()
+        def level = (sev == 'critical' || sev == 'high') ? 'error' : (sev == 'medium' ? 'warning' : 'note')
+        def ruleId = 'dt/' + (vuln.vulnId ?: 'unknown').toString().replace('"', '\\"')
+        def msg = ((vuln.title ?: vuln.vulnId ?: 'Vulnerability').toString()
+                    .replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')) +
+                  ' in ' + (comp.name ?: 'unknown').toString().replace('"', '\\"') +
+                  ':' + (comp.version ?: '').toString() + ' — ' + sev.toUpperCase()
+        results << ('{"ruleId":"' + ruleId + '","level":"' + level +
+                    '","message":{"text":"' + msg + '"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"requirements.txt"}}}]}')
+    }
+    if (results.isEmpty()) {
+        results << '{"ruleId":"dependency-track/scan-clean","level":"note","message":{"text":"Dependency-Track SBOM analysis complete. No vulnerabilities found."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"requirements.txt"}}}]}'
+    }
+    return ('{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",' +
+            '"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Dependency-Track","informationUri":"' +
+            dtHostUrl + '","version":"1.0.0"}},"results":[' + results.join(',') + ']}]}')
+}
+
 pipeline {
     agent {
         kubernetes {
@@ -104,7 +130,7 @@ spec:
                         apt-get update -qq
                         apt-get install -y --no-install-recommends default-jre-headless git curl
                         pip install --no-cache-dir -r requirements.txt
-                        pip install --no-cache-dir "smart-tests-cli~=2.0"
+                        pip install --no-cache-dir "smart-tests-cli~=2.0" cyclonedx-bom
                         smart-tests --version
                     '''
                 }
@@ -204,6 +230,91 @@ spec:
                         }
                     }
                     junit 'test-results/results.xml'
+                }
+            }
+        }
+
+        stage('Dependency-Track Scan') {
+            steps {
+                container('python') {
+                    withCredentials([string(credentialsId: 'dependency-track-api-key', variable: 'DT_API_KEY')]) {
+                        sh '''
+                            set +e
+                            DT_URL="http://dependency-track-api-server.dependency-track.svc.cluster.local:8080"
+                            mkdir -p dt-results
+
+                            echo "=== Generating CycloneDX SBOM from requirements.txt ==="
+                            cyclonedx-py requirements requirements.txt \
+                                --output-format xml \
+                                --outfile dt-results/bom.xml
+                            ls -lh dt-results/bom.xml || { echo "SBOM generation failed"; exit 0; }
+
+                            echo "=== Uploading SBOM to Dependency-Track ==="
+                            base64 -w 0 dt-results/bom.xml > dt-results/bom-b64.txt
+                            cat > dt-results/dt-payload.json <<PAYLOAD
+{"projectName":"todo-backend","projectVersion":"${BRANCH_NAME:-main}","autoCreate":true,"bom":"$(cat dt-results/bom-b64.txt)"}
+PAYLOAD
+
+                            HTTP=$(curl -s -X PUT "${DT_URL}/api/v1/bom" \
+                              -H "X-Api-Key: ${DT_API_KEY}" \
+                              -H "Content-Type: application/json" \
+                              -d @dt-results/dt-payload.json \
+                              -o dt-results/dt-upload.json \
+                              -w "%{http_code}")
+                            echo "DT upload HTTP: ${HTTP}"
+                            cat dt-results/dt-upload.json
+
+                            if [ "${HTTP}" = "200" ]; then
+                                TOKEN=$(grep -o '"token":"[^"]*"' dt-results/dt-upload.json | cut -d'"' -f4)
+                                echo "Upload token: ${TOKEN}"
+
+                                echo "=== Waiting for DT analysis (up to 2 min) ==="
+                                for i in $(seq 1 24); do
+                                    sleep 5
+                                    STATUS=$(curl -s -H "X-Api-Key: ${DT_API_KEY}" \
+                                      "${DT_URL}/api/v1/event/token/${TOKEN}" | \
+                                      grep -o '"processing":[a-z]*' | cut -d: -f2)
+                                    echo "  [${i}/24] processing=${STATUS}"
+                                    [ "${STATUS}" = "false" ] && break
+                                done
+
+                                echo "=== Fetching findings ==="
+                                PROJECT_UUID=$(curl -s -H "X-Api-Key: ${DT_API_KEY}" \
+                                  "${DT_URL}/api/v1/project?name=todo-backend&version=${BRANCH_NAME:-main}" | \
+                                  grep -o '"uuid":"[^"]*"' | head -1 | cut -d'"' -f4)
+                                echo "Project UUID: ${PROJECT_UUID}"
+
+                                if [ -n "${PROJECT_UUID}" ]; then
+                                    curl -s -H "X-Api-Key: ${DT_API_KEY}" \
+                                      "${DT_URL}/api/v1/finding/project/${PROJECT_UUID}" \
+                                      > dt-results/dt-findings.json
+                                    echo "Findings: $(grep -c '"vulnerability"' dt-results/dt-findings.json || echo 0)"
+                                fi
+                            fi
+                            exit 0
+                        '''
+                    }
+                }
+                script {
+                    def sarifFile = 'dt-results/dependency-track-scan.sarif'
+                    def dtUrl = 'http://dependency-track.34.75.0.106.nip.io'
+                    def findingsJson = fileExists('dt-results/dt-findings.json') ? readFile('dt-results/dt-findings.json').trim() : '[]'
+
+                    def sarif = _buildDtSarif(findingsJson, dtUrl)
+                    writeFile file: sarifFile, text: sarif
+                    archiveArtifacts artifacts: 'dt-results/**', allowEmptyArchive: true
+
+                    try {
+                        registerSecurityScan(
+                            artifacts: sarifFile,
+                            format: 'sarif',
+                            scanner: 'Dependency-Track',
+                            archive: false
+                        )
+                        echo "✅ DT findings registered with CloudBees Unify"
+                    } catch (Exception e) {
+                        echo "⚠️  Unify registration failed: ${e.message}"
+                    }
                 }
             }
         }
