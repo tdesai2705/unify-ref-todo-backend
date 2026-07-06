@@ -23,32 +23,6 @@
 // See DEMO_GUIDE.md for SE walkthrough. See README.md for architecture details.
 // ─────────────────────────────────────────────────────────────────────────────
 
-@NonCPS
-String _buildDtSarif(String findingsJson, String dtHostUrl) {
-    def findings = new groovy.json.JsonSlurper().parseText(findingsJson)
-    def list = (findings instanceof List) ? findings : (findings.findings ?: [])
-    def results = []
-    list.take(100).each { f ->
-        def vuln = f?.vulnerability ?: [:]
-        def comp = f?.component ?: [:]
-        def sev   = (vuln.severity ?: 'UNASSIGNED').toString().toLowerCase()
-        def level = (sev == 'critical' || sev == 'high') ? 'error' : (sev == 'medium' ? 'warning' : 'note')
-        def ruleId = 'dt/' + (vuln.vulnId ?: 'unknown').toString().replace('"', '\\"')
-        def msg = ((vuln.title ?: vuln.vulnId ?: 'Vulnerability').toString()
-                    .replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')) +
-                  ' in ' + (comp.name ?: 'unknown').toString().replace('"', '\\"') +
-                  ':' + (comp.version ?: '').toString() + ' — ' + sev.toUpperCase()
-        results << ('{"ruleId":"' + ruleId + '","level":"' + level +
-                    '","message":{"text":"' + msg + '"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"requirements.txt"}}}]}')
-    }
-    if (results.isEmpty()) {
-        results << '{"ruleId":"dependency-track/scan-clean","level":"note","message":{"text":"Dependency-Track SBOM analysis complete. No vulnerabilities found."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"requirements.txt"}}}]}'
-    }
-    return ('{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",' +
-            '"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Dependency-Track","informationUri":"' +
-            dtHostUrl + '","version":"1.0.0"}},"results":[' + results.join(',') + ']}]}')
-}
-
 pipeline {
     agent {
         kubernetes {
@@ -320,22 +294,53 @@ PAYLOAD
                                     echo "Findings: $(grep -c '"vulnerability"' dt-results/dt-findings.json || echo 0)"
                                 fi
                             fi
+
+                            echo "=== Building SARIF from findings ==="
+                            python3 - <<'PYEOF'
+import json, sys
+
+DT_URL = "http://dependency-track.34.75.0.106.nip.io"
+findings_file = "dt-results/dt-findings.json"
+sarif_file = "dt-results/dependency-track-scan.sarif"
+
+try:
+    findings = json.loads(open(findings_file).read())
+    if not isinstance(findings, list):
+        findings = findings.get("findings", [])
+except Exception:
+    findings = []
+
+results = []
+for f in findings[:100]:
+    vuln = f.get("vulnerability", {})
+    comp = f.get("component", {})
+    sev = (vuln.get("severity") or "UNASSIGNED").lower()
+    level = "error" if sev in ("critical", "high") else ("warning" if sev == "medium" else "note")
+    rule_id = "dt/" + str(vuln.get("vulnId") or "unknown").replace('"', '\\"')
+    msg = (str(vuln.get("title") or vuln.get("vulnId") or "Vulnerability")
+           .replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n"))
+    msg += " in " + str(comp.get("name") or "unknown") + ":" + str(comp.get("version") or "") + " — " + sev.upper()
+    results.append('{"ruleId":"' + rule_id + '","level":"' + level + '","message":{"text":"' + msg + '"},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"requirements.txt"}}}]}')
+
+if not results:
+    results.append('{"ruleId":"dependency-track/scan-clean","level":"note","message":{"text":"Dependency-Track SBOM analysis complete. No vulnerabilities found."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"requirements.txt"}}}]}')
+
+sarif = ('{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",'
+         '"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Dependency-Track","informationUri":"' + DT_URL + '","version":"1.0.0"}},'
+         '"results":[' + ','.join(results) + ']}]}')
+
+open(sarif_file, "w").write(sarif)
+print(f"SARIF written ({len(sarif)} bytes, {len(results)} findings)")
+PYEOF
                             exit 0
                         '''
                     }
                 }
+                archiveArtifacts artifacts: 'dt-results/**', allowEmptyArchive: true
                 script {
-                    def sarifFile = 'dt-results/dependency-track-scan.sarif'
-                    def dtUrl = 'http://dependency-track.34.75.0.106.nip.io'
-                    def findingsJson = fileExists('dt-results/dt-findings.json') ? readFile('dt-results/dt-findings.json').trim() : '[]'
-
-                    def sarif = _buildDtSarif(findingsJson, dtUrl)
-                    writeFile file: sarifFile, text: sarif
-                    archiveArtifacts artifacts: 'dt-results/**', allowEmptyArchive: true
-
                     try {
                         registerSecurityScan(
-                            artifacts: sarifFile,
+                            artifacts: 'dt-results/dependency-track-scan.sarif',
                             format: 'sarif',
                             scanner: 'Dependency-Track',
                             archive: false
