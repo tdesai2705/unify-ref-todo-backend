@@ -456,8 +456,8 @@ PYEOF
                         registerSecurityScan(
                             artifacts: 'dt-results/dependency-track-scan.sarif',
                             format: 'sarif',
-                            scanner: 'Grype',
-                            archive: false
+                            scanner: 'Checkov',
+                            archive: true
                         )
                         echo "✅ DT findings registered with CloudBees Unify"
                     } catch (Exception e) {
