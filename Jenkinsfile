@@ -343,7 +343,10 @@ PAYLOAD
                                         curl -s -H "X-Api-Key: ${DT_API_KEY}" \
                                           "${DT_URL}/api/v1/finding/project/${PROJECT_UUID}" \
                                           > dt-results/dt-findings.json
-                                        COUNT=$(grep -c '"vulnerability"' dt-results/dt-findings.json)
+                                        # dt-findings.json is minified onto one line, so grep -c
+                                        # (which counts matching *lines*) always caps at 1 -- count
+                                        # occurrences instead.
+                                        COUNT=$(grep -o '"vulnerability"' dt-results/dt-findings.json | wc -l | tr -d ' ')
                                         echo "  [retry ${j}/3] Findings: ${COUNT}"
                                         [ "${COUNT}" != "0" ] && break
                                         sleep 10
