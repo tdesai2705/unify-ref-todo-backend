@@ -265,17 +265,17 @@ spec:
 
         stage('Dependency-Track Scan') {
             steps {
+                sh 'mkdir -p dt-results && chmod 777 dt-results'
                 container('python') {
                     withCredentials([string(credentialsId: 'dependency-track-api-key', variable: 'DT_API_KEY')]) {
                         sh '''
                             set +e
                             DT_URL="http://dependency-track-api-server.dependency-track.svc.cluster.local:8080"
-                            mkdir -p dt-results
 
                             echo "=== Generating CycloneDX SBOM from requirements.txt ==="
-                            cyclonedx-py requirements requirements.txt \
-                                --output-format xml \
-                                --outfile dt-results/bom.xml
+                            cyclonedx-py requirements -i requirements.txt \
+                                --of xml \
+                                > dt-results/bom.xml
                             ls -lh dt-results/bom.xml || { echo "SBOM generation failed"; exit 0; }
 
                             echo "=== Uploading SBOM to Dependency-Track ==="
