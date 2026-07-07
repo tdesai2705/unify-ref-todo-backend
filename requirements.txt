@@ -8,6 +8,3 @@ Werkzeug==3.0.1
 pytest==7.4.3
 pytest-cov==4.1.0
 rox==6.0.1
-requests==2.31.0
-PyYAML==5.3.1
-urllib3==1.26.4
