@@ -1,0 +1,83 @@
+apiVersion: automation.cloudbees.io/v1alpha1
+kind: workflow
+
+name: Dependency-Track Security Evidence
+
+on:
+  push:
+    branches:
+      - obs-training
+  workflow_dispatch:
+
+permissions:
+  scm-token-own: read
+  id-token: read
+
+jobs:
+  publish-dt-evidence:
+    steps:
+      - name: Fetch DT findings and build evidence
+        id: dt-findings
+        uses: docker://python:3.11-slim
+        run: |
+          pip install --quiet requests
+          python3 - <<'PYEOF'
+          import os
+          import requests
+
+          DT_URL = "http://dependency-track-api.34.75.0.106.nip.io"
+          API_KEY = "${{ secrets.DT_API_KEY }}"
+          headers = {"X-Api-Key": API_KEY}
+
+          r = requests.get(
+              DT_URL + "/api/v1/project",
+              params={"name": "todo-backend", "version": "obs-training"},
+              headers=headers,
+              timeout=30,
+          )
+          r.raise_for_status()
+          projects = r.json()
+
+          if not projects:
+              content = "## Dependency-Track Security Evidence\n\nNo project found for todo-backend/obs-training."
+          else:
+              uuid = projects[0]["uuid"]
+              r = requests.get(
+                  DT_URL + "/api/v1/finding/project/" + uuid,
+                  headers=headers,
+                  timeout=30,
+              )
+              r.raise_for_status()
+              findings = r.json()
+
+              severity_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "UNASSIGNED": 4}
+              findings.sort(key=lambda f: severity_order.get((f.get("vulnerability") or {}).get("severity", "UNASSIGNED"), 5))
+
+              lines = [
+                  "## Dependency-Track Security Findings -- todo-backend (obs-training)",
+                  "",
+                  "**Total findings: " + str(len(findings)) + "**",
+                  "",
+                  "| Severity | CVE | Component | CVSS |",
+                  "|---|---|---|---|",
+              ]
+              for f in findings:
+                  v = f.get("vulnerability") or {}
+                  c = f.get("component") or {}
+                  cvss = v.get("cvssV3BaseScore") or v.get("cvssV2BaseScore") or "-"
+                  lines.append(
+                      "| " + str(v.get("severity")) + " | " + str(v.get("vulnId"))
+                      + " | " + str(c.get("name", "")) + ":" + str(c.get("version", ""))
+                      + " | " + str(cvss) + " |"
+                  )
+              content = "\n".join(lines)
+
+          with open(os.environ["CLOUDBEES_OUTPUTS"] + "/EVIDENCE", "w") as fh:
+              fh.write(content)
+          print(content)
+          PYEOF
+
+      - name: Publish DT evidence
+        uses: cloudbees-io/publish-evidence-item@v1
+        with:
+          content: ${{ steps.dt-findings.outputs.EVIDENCE }}
