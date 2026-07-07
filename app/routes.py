@@ -16,6 +16,7 @@ def _todo_dict(todo):
         data['overdue'] = delta < 0
         data['days_until_due'] = delta
         data['urgency'] = 'critical' if delta < 0 else ('warning' if delta <= 2 else 'ok')
+        data['overdue_label'] = 'OVERDUE' if delta < 0 else ''
     return data
 
 
@@ -133,22 +134,8 @@ def bulk_complete():
     if not todo_ids:
         return jsonify({'error': 'todo_ids must not be empty'}), 400
 
-    updated = []
-    for tid in todo_ids:
-        todo = Todo.query.get(tid)
-        if todo:
-            todo.completed = True
-            updated.append(tid)
-
-    skipped = [tid for tid in todo_ids if tid not in updated]
-    db.session.commit()
-    return jsonify({
-        'completed': updated,
-        'count': len(updated),
-        'skipped': skipped,
-        'total_requested': len(todo_ids),
-        'success_rate': round(len(updated) / len(todo_ids) * 100, 1) if todo_ids else 0,
-    }), 200
+    from app.bulk_ops import execute_bulk_complete  # lazy: not in static deps
+    return jsonify(execute_bulk_complete(todo_ids, db, Todo)), 200
 
 
 # ── Stats ─────────────────────────────────────────────────────
@@ -194,6 +181,7 @@ def get_stats():
         response['overdue_count'] = overdue
         response['by_category'] = {cat: count for cat, count in categories}
         response['overdue_rate'] = round(overdue / total * 100, 2) if total > 0 else 0
+        response['pending_rate'] = round((total - completed) / total * 100, 2) if total > 0 else 0
 
     return jsonify(response), 200
 
