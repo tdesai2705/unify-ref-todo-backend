@@ -1,0 +1,13 @@
+Flask==3.0.0
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.0.5
+Flask-CORS==4.0.0
+psycopg2-binary==2.9.10
+python-dotenv==1.0.0
+Werkzeug==3.0.1
+pytest==7.4.3
+pytest-cov==4.1.0
+rox==6.0.1
+requests==2.6.0
+PyYAML==5.3.1
+urllib3==1.26.4
