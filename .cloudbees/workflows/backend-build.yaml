@@ -103,11 +103,12 @@ jobs:
 
           DT_URL = "http://dependency-track-api.34.75.0.106.nip.io"
           API_KEY = "${{ secrets.DT_API_KEY }}"
+          BRANCH = "${{ cloudbees.scm.branch }}"
           headers = {"X-Api-Key": API_KEY}
 
           r = requests.get(
               DT_URL + "/api/v1/project",
-              params={"name": "todo-backend", "version": "obs-training"},
+              params={"name": "todo-backend", "version": BRANCH},
               headers=headers,
               timeout=30,
           )
@@ -115,7 +116,7 @@ jobs:
           projects = r.json()
 
           if not projects:
-              content = "## Dependency-Track Security Evidence\n\nNo project found for todo-backend/obs-training."
+              content = "## Dependency-Track Security Evidence\n\nNo project found for todo-backend/" + BRANCH + "."
           else:
               uuid = projects[0]["uuid"]
               r = requests.get(
@@ -130,7 +131,7 @@ jobs:
               findings.sort(key=lambda f: severity_order.get((f.get("vulnerability") or {}).get("severity", "UNASSIGNED"), 5))
 
               lines = [
-                  "## Dependency-Track Security Findings -- todo-backend (obs-training)",
+                  "## Dependency-Track Security Findings -- todo-backend (" + BRANCH + ")",
                   "",
                   "**Total findings: " + str(len(findings)) + "**",
                   "",
