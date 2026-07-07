@@ -246,8 +246,8 @@ spec:
                             set +e
                             DT_URL="http://dependency-track-api-server.dependency-track.svc.cluster.local:8080"
 
-                            echo "=== Generating CycloneDX SBOM from requirements.txt ==="
-                            cyclonedx-py requirements -i requirements.txt \
+                            echo "=== Generating CycloneDX SBOM from requirements-security-demo.txt ==="
+                            cyclonedx-py requirements -i requirements-security-demo.txt \
                                 --of xml \
                                 > dt-results/bom.xml
                             ls -lh dt-results/bom.xml || { echo "SBOM generation failed"; exit 0; }
@@ -408,7 +408,7 @@ for f in findings[:100]:
         "level": level,
         "message": {"text": msg + " (component: " + comp_label + ")"},
         "locations": [{"physicalLocation": {
-            "artifactLocation": {"uri": "requirements.txt"},
+            "artifactLocation": {"uri": "requirements-security-demo.txt"},
             "region": {"startLine": 1},
         }}],
     })
@@ -425,7 +425,7 @@ if not results:
         "ruleId": "dependency-track/scan-clean",
         "level": "note",
         "message": {"text": "Dependency-Track SBOM analysis complete. No vulnerabilities found."},
-        "locations": [{"physicalLocation": {"artifactLocation": {"uri": "requirements.txt"}, "region": {"startLine": 1}}}],
+        "locations": [{"physicalLocation": {"artifactLocation": {"uri": "requirements-security-demo.txt"}, "region": {"startLine": 1}}}],
     })
 
 sarif = {
