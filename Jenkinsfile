@@ -247,8 +247,12 @@ spec:
                             DT_URL="http://dependency-track-api-server.dependency-track.svc.cluster.local:8080"
 
                             echo "=== Generating CycloneDX SBOM from requirements-security-demo.txt ==="
-                            cyclonedx-py requirements -i requirements-security-demo.txt \
-                                --of xml \
+                            # cyclonedx-py's requirements scanner silently prefers a file literally
+                            # named requirements.txt in the cwd over whatever -i points at, so scan
+                            # from an isolated temp dir instead of fighting that flag.
+                            mkdir -p /tmp/dt-scan
+                            cp requirements-security-demo.txt /tmp/dt-scan/requirements.txt
+                            (cd /tmp/dt-scan && cyclonedx-py requirements -i requirements.txt --of xml) \
                                 > dt-results/bom.xml
                             ls -lh dt-results/bom.xml || { echo "SBOM generation failed"; exit 0; }
 
