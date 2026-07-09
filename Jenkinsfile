@@ -199,10 +199,17 @@ spec:
                                         | smart-tests subset pytest \\
                                             --session @session.txt \\
                                             --confidence 70% \\
-                                            > subset.txt
+                                            > subset.txt 2> subset_stderr.log
 
                                     echo "Smart Tests selected \$(wc -l < subset.txt) of 35 tests:"
                                     cat subset.txt
+
+                                    echo "=== DEBUG: subset stderr ==="
+                                    cat subset_stderr.log
+                                    SUBSET_ID=\$(grep -oE 'subset [0-9]+' subset_stderr.log | grep -oE '[0-9]+' | head -1)
+                                    echo "=== DEBUG: subset id = \${SUBSET_ID} ==="
+                                    smart-tests inspect subset --subset-id "\${SUBSET_ID}" || echo "inspect subset failed"
+                                    echo "=== DEBUG: end inspect subset ==="
 
                                     FEATURE_ENHANCED_STATS=${params.FEATURE_ENHANCED_STATS} \\
                                     FEATURE_DUE_DATE_WARNINGS=${params.FEATURE_DUE_DATE_WARNINGS} \\
