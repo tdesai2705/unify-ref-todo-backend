@@ -198,7 +198,7 @@ spec:
                                         | grep '::' \\
                                         | smart-tests --log-level audit subset pytest \\
                                             --session @session.txt \\
-                                            --confidence 70% \\
+                                            --target 50% \\
                                             > subset.txt 2> subset_stderr.log
 
                                     echo "Smart Tests selected \$(wc -l < subset.txt) of 35 tests:"
