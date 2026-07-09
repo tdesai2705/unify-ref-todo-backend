@@ -78,3 +78,6 @@ class FeatureFlags:
         if _setup_done:
             return _flags.priority_filter.is_enabled()
         return _env_flag('FEATURE_PRIORITY_FILTER')
+
+
+# smart-tests isolation probe: feature_flags-only diff for PTS subsetting test
