@@ -211,6 +211,24 @@ spec:
                                     smart-tests inspect subset --subset-id "\${SUBSET_ID}" || echo "inspect subset failed"
                                     echo "=== DEBUG: end inspect subset ==="
 
+                                    echo "=== DEBUG: raw workspace state API response ==="
+                                    curl -sS -H "Authorization: Bearer \${SMART_TESTS_TOKEN}" \\
+                                        "https://api.mercury.launchableinc.com/intake/organizations/8c8df396-03d5-4d10-9a7d-151e00947166/workspaces/9f7fb343-ad33-491f-9daf-69e967065142/state" \\
+                                        | python3 -m json.tool || echo "state fetch failed"
+                                    echo "=== DEBUG: end raw workspace state ==="
+
+                                    echo "=== DEBUG: raw test_sessions API response ==="
+                                    curl -sS -H "Authorization: Bearer \${SMART_TESTS_TOKEN}" \\
+                                        "https://api.mercury.launchableinc.com/intake/organizations/8c8df396-03d5-4d10-9a7d-151e00947166/workspaces/9f7fb343-ad33-491f-9daf-69e967065142/\$(cat session.txt)" \\
+                                        | python3 -m json.tool || echo "test_sessions fetch failed"
+                                    echo "=== DEBUG: end raw test_sessions ==="
+
+                                    echo "=== DEBUG: raw subset detail API response ==="
+                                    curl -sS -H "Authorization: Bearer \${SMART_TESTS_TOKEN}" \\
+                                        "https://api.mercury.launchableinc.com/intake/organizations/8c8df396-03d5-4d10-9a7d-151e00947166/workspaces/9f7fb343-ad33-491f-9daf-69e967065142/subset/\${SUBSET_ID}" \\
+                                        | python3 -m json.tool || echo "subset detail fetch failed"
+                                    echo "=== DEBUG: end raw subset detail ==="
+
                                     FEATURE_ENHANCED_STATS=${params.FEATURE_ENHANCED_STATS} \\
                                     FEATURE_DUE_DATE_WARNINGS=${params.FEATURE_DUE_DATE_WARNINGS} \\
                                     FEATURE_BULK_OPERATIONS=${params.FEATURE_BULK_OPERATIONS} \\
