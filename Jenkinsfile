@@ -196,7 +196,7 @@ spec:
                                 else
                                     PYTHONPATH=. pytest tests/ --collect-only -q \\
                                         | grep '::' \\
-                                        | smart-tests subset pytest \\
+                                        | smart-tests --log-level audit subset pytest \\
                                             --session @session.txt \\
                                             --confidence 70% \\
                                             > subset.txt 2> subset_stderr.log
