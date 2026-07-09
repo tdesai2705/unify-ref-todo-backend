@@ -19,3 +19,6 @@ def execute_bulk_complete(todo_ids, db, Todo):  # bulk feature v2
         'all_completed': len(not_found) == 0,
         'fully_completed': len(not_found) == 0 and len(updated) > 0,
     }
+
+
+# smart-tests isolation probe: bulk_ops-only diff for PTS subsetting test
