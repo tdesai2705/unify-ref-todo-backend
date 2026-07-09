@@ -65,7 +65,7 @@ class FeatureFlags:
     def due_date_warnings(cls) -> bool:
         if _setup_done:
             return _flags.due_date_warnings.is_enabled()
-        return False  # smart-tests isolation probe: scoped bug in feature_flags.py
+        return _env_flag('FEATURE_DUE_DATE_WARNINGS')
 
     @classmethod
     def bulk_operations(cls) -> bool:
