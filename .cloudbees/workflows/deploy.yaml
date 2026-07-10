@@ -16,6 +16,35 @@ jobs:
   deploy:
     environment: ${{ inputs.environment }}
     steps:
+      - name: Update infra repo image tag
+        uses: docker://alpine/git:latest
+        shell: sh
+        run: |
+          git clone https://${{ secrets.GITHUB_PAT }}@github.com/tdesai2705/unify-ref-todo-infrastructure.git infra
+          cd infra
+
+          VALUES_FILE="helm/todo-app/envs/${{ inputs.environment }}/backend-values.yaml"
+          if [ ! -f "$VALUES_FILE" ]; then
+            echo "No values file for environment '${{ inputs.environment }}' at $VALUES_FILE"
+            exit 1
+          fi
+
+          awk -v tag="${{ inputs.artifact-id }}" '{if(/^[[:space:]]*tag:/) printf "    tag: %s\n", tag; else print}' "$VALUES_FILE" > /tmp/updated.yaml
+          mv /tmp/updated.yaml "$VALUES_FILE"
+          echo "Updated $VALUES_FILE:"
+          cat "$VALUES_FILE"
+
+          git config user.email "ci@cloudbees.com"
+          git config user.name "CloudBees CI"
+          git add "$VALUES_FILE"
+          git commit -m "Deploy backend:${{ inputs.artifact-id }} to ${{ inputs.environment }} [skip ci]" || echo "No changes to commit"
+
+          TARGET_BRANCH=main
+          for i in 1 2 3; do
+            git pull --rebase origin "$TARGET_BRANCH" && git push "https://${{ secrets.GITHUB_PAT }}@github.com/tdesai2705/unify-ref-todo-infrastructure.git" "$TARGET_BRANCH" && break
+            sleep 5
+          done
+
       - name: Register backend deployment
         uses: cloudbees-io/register-deployed-artifact@v1
         with:
