@@ -18,8 +18,23 @@ on:
 jobs:
   deploy:
     steps:
+      - name: Map environment name
+        id: map-env
+        uses: docker://alpine:latest
+        shell: sh
+        run: |
+          case "${{ inputs.environment }}" in
+            dev) UNIFY_ENV="dev-todo" ;;
+            qa) UNIFY_ENV="qa-todo" ;;
+            prod) UNIFY_ENV="prod-todo" ;;
+            *) echo "Unknown environment: ${{ inputs.environment }}"; exit 1 ;;
+          esac
+          printf '%s' "$UNIFY_ENV" > $CLOUDBEES_OUTPUTS/UNIFY_ENV
+
       - name: Update infra repo image tag
         uses: docker://alpine/git:latest
+        kind: deploy
+        env: ${{ steps.map-env.outputs.UNIFY_ENV }}
         shell: sh
         run: |
           git clone https://${{ secrets.GITHUB_PAT }}@github.com/tdesai2705/unify-ref-todo-infrastructure.git infra
@@ -46,19 +61,6 @@ jobs:
             git pull --rebase origin "$TARGET_BRANCH" && git push "https://${{ secrets.GITHUB_PAT }}@github.com/tdesai2705/unify-ref-todo-infrastructure.git" "$TARGET_BRANCH" && break
             sleep 5
           done
-
-      - name: Map environment name
-        id: map-env
-        uses: docker://alpine:latest
-        shell: sh
-        run: |
-          case "${{ inputs.environment }}" in
-            dev) UNIFY_ENV="dev-todo" ;;
-            qa) UNIFY_ENV="qa-todo" ;;
-            prod) UNIFY_ENV="prod-todo" ;;
-            *) echo "Unknown environment: ${{ inputs.environment }}"; exit 1 ;;
-          esac
-          printf '%s' "$UNIFY_ENV" > $CLOUDBEES_OUTPUTS/UNIFY_ENV
 
       - name: Register backend deployment
         uses: cloudbees-io/register-deployed-artifact@v2
