@@ -58,7 +58,7 @@ jobs:
             prod) UNIFY_ENV="prod-todo" ;;
             *) echo "Unknown environment: ${{ inputs.environment }}"; exit 1 ;;
           esac
-          echo "$UNIFY_ENV" > $CLOUDBEES_OUTPUTS/UNIFY_ENV
+          printf '%s' "$UNIFY_ENV" > $CLOUDBEES_OUTPUTS/UNIFY_ENV
 
       - name: Register backend deployment
         uses: cloudbees-io/register-deployed-artifact@v2
