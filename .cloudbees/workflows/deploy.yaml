@@ -17,7 +17,6 @@ on:
 
 jobs:
   deploy:
-    environment: ${{ inputs.environment }}
     steps:
       - name: Update infra repo image tag
         uses: docker://alpine/git:latest
