@@ -34,7 +34,6 @@ jobs:
       - name: Update infra repo image tag
         uses: docker://alpine/git:latest
         kind: deploy
-        env: ${{ steps.map-env.outputs.UNIFY_ENV }}
         shell: sh
         run: |
           git clone https://${{ secrets.GITHUB_PAT }}@github.com/tdesai2705/unify-ref-todo-infrastructure.git infra
