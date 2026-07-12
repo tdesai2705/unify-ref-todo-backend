@@ -49,7 +49,7 @@ jobs:
           done
 
       - name: Register backend deployment
-        uses: cloudbees-io/register-deployed-artifact@v1
+        uses: cloudbees-io/register-deployed-artifact@v2
         with:
           artifact-id: ${{ inputs.artifact-id }}
           target-environment: ${{ inputs.environment }}
