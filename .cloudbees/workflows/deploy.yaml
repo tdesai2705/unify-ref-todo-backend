@@ -47,11 +47,24 @@ jobs:
             sleep 5
           done
 
+      - name: Map environment name
+        id: map-env
+        uses: docker://alpine:latest
+        shell: sh
+        run: |
+          case "${{ inputs.environment }}" in
+            dev) UNIFY_ENV="dev-todo" ;;
+            qa) UNIFY_ENV="qa-todo" ;;
+            prod) UNIFY_ENV="prod-todo" ;;
+            *) echo "Unknown environment: ${{ inputs.environment }}"; exit 1 ;;
+          esac
+          echo "$UNIFY_ENV" > $CLOUDBEES_OUTPUTS/UNIFY_ENV
+
       - name: Register backend deployment
         uses: cloudbees-io/register-deployed-artifact@v2
         with:
           artifact-id: ${{ inputs.artifact-id }}
-          target-environment: ${{ inputs.environment }}
+          target-environment: ${{ steps.map-env.outputs.UNIFY_ENV }}
 
       - name: Publish deployment evidence
         uses: cloudbees-io/publish-evidence-item@v1
