@@ -11,6 +11,9 @@ on:
       environment:
         type: string
         required: true
+    secrets:
+      GITHUB_PAT:
+        required: true
 
 jobs:
   deploy:
