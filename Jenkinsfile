@@ -229,10 +229,20 @@ spec:
                                         | python3 -m json.tool || echo "subset detail fetch failed"
                                     echo "=== DEBUG: end raw subset detail ==="
 
+                                    # Read subset.txt one full line per test id -- some parametrized
+                                    # test ids contain internal spaces (e.g. "[trailing -trailing]"),
+                                    # and naive \$(cat subset.txt) word-splits on ALL whitespace,
+                                    # which breaks such ids into two args, one of which can look like
+                                    # an unrecognized CLI flag to pytest and abort before any test runs.
+                                    set --
+                                    while IFS= read -r line; do
+                                        set -- "\$@" "\$line"
+                                    done < subset.txt
+
                                     FEATURE_ENHANCED_STATS=${params.FEATURE_ENHANCED_STATS} \\
                                     FEATURE_DUE_DATE_WARNINGS=${params.FEATURE_DUE_DATE_WARNINGS} \\
                                     FEATURE_BULK_OPERATIONS=${params.FEATURE_BULK_OPERATIONS} \\
-                                    PYTHONPATH=. pytest \$(cat subset.txt) \\
+                                    PYTHONPATH=. pytest "\$@" \\
                                         --cov=app --cov-report=xml:test-results/coverage.xml \\
                                         --junitxml=test-results/results.xml \\
                                         -v
