@@ -146,11 +146,20 @@ def test_create_todo_accepts_any_category(client, user, category):
 # ══════════════════════════════════════════════════════════════
 
 VALID_ISO_DATES = [
+    # Fixed, deterministic strings only -- Smart Tests' subset flow runs
+    # `pytest --collect-only` once to build subset.txt, then a SECOND,
+    # later `pytest <ids>` to actually run it. A value computed from
+    # datetime.utcnow() at collection time (e.g. "a day from now") produces
+    # a DIFFERENT literal timestamp string on each of those two collections,
+    # so the exact node id in subset.txt no longer exists by the second
+    # pass, and pytest aborts the whole run with "not found" errors instead
+    # of just failing that one test. Never derive a parametrize id from
+    # wall-clock time.
     '2026-08-01T00:00:00',
     '2026-12-31T23:59:59',
     '2027-01-01T00:00:00',
-    (datetime.utcnow() + timedelta(days=1)).isoformat(),
-    (datetime.utcnow() - timedelta(days=10)).isoformat(),
+    '2026-09-15T12:00:00',
+    '2025-06-01T08:30:00',
 ]
 
 MALFORMED_DUE_DATES = [
