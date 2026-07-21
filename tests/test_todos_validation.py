@@ -89,11 +89,11 @@ def test_create_todo_accepts_valid_title(client, user, title):
     assert response.get_json()['title'] == title
 
 
-def test_create_todo_whitespace_only_title_is_accepted_as_truthy(client, user):
-    """Route only checks truthiness, not blank-after-strip -- documents real behavior."""
+def test_create_todo_whitespace_only_title_is_rejected(client, user):
+    """create_todo now strip()-checks the title, not just truthiness --
+    was previously accepted (201), see test_known_issues.py history."""
     response = client.post('/todos', json={'title': '   ', 'user_id': user})
-    assert response.status_code == 201
-    assert response.get_json()['title'] == '   '
+    assert response.status_code == 400
 
 
 # ══════════════════════════════════════════════════════════════
@@ -118,11 +118,12 @@ def test_create_todo_rejects_nonexistent_user(client, nonexistent_id):
 
 
 # ══════════════════════════════════════════════════════════════
-# create_todo — priority values (no validation in route, any string accepted)
+# create_todo — priority values (validated against high/medium/low --
+# invalid values covered in test_known_issues.py)
 # ══════════════════════════════════════════════════════════════
 
-@pytest.mark.parametrize('priority', ['high', 'medium', 'low', 'urgent', 'none', '', 'HIGH', '123'])
-def test_create_todo_accepts_any_priority_string(client, user, priority):
+@pytest.mark.parametrize('priority', ['high', 'medium', 'low'])
+def test_create_todo_accepts_valid_priority_values(client, user, priority):
     response = client.post('/todos', json={'title': 'Priority test', 'user_id': user, 'priority': priority})
     assert response.status_code == 201
     assert response.get_json()['priority'] == priority
@@ -154,8 +155,8 @@ def test_create_todo_accepts_any_category(client, user, category):
 
 
 # ══════════════════════════════════════════════════════════════
-# create_todo — due_date parsing (real route has NO try/except around
-# datetime.fromisoformat, so malformed input raises ValueError, not a 400)
+# create_todo — due_date parsing (malformed input now returns a clean
+# 400, via _parse_due_date() wrapped in try/except ValueError)
 # ══════════════════════════════════════════════════════════════
 
 VALID_ISO_DATES = [
@@ -192,18 +193,17 @@ def test_create_todo_accepts_valid_iso_due_date(client, user, due_date):
 
 
 @pytest.mark.parametrize('bad_due_date', MALFORMED_DUE_DATES)
-def test_create_todo_malformed_due_date_raises_valueerror(client, user, bad_due_date):
-    """Documents real (arguably-a-bug) behavior: routes.py does not catch
-    the ValueError from datetime.fromisoformat, so it propagates instead
-    of returning a 400. Empty string is falsy so it's the one case that
-    short-circuits to None cleanly."""
+def test_create_todo_malformed_due_date_returns_400(client, user, bad_due_date):
+    """Empty string is falsy so it short-circuits to None cleanly (still 201);
+    every other malformed value now returns a clean 400 instead of raising
+    (see test_known_issues.py for the original failing-test history)."""
     if bad_due_date == '':
         response = client.post('/todos', json={'title': 'Empty due date', 'user_id': user, 'due_date': bad_due_date})
         assert response.status_code == 201
         assert response.get_json()['due_date'] is None
     else:
-        with pytest.raises(ValueError):
-            client.post('/todos', json={'title': 'Bad due date', 'user_id': user, 'due_date': bad_due_date})
+        response = client.post('/todos', json={'title': 'Bad due date', 'user_id': user, 'due_date': bad_due_date})
+        assert response.status_code == 400
 
 
 def test_create_todo_without_due_date_defaults_to_none(client, user):
