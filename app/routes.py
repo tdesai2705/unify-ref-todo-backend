@@ -1,3 +1,4 @@
+import re
 from flask import Blueprint, request, jsonify
 from app import db
 from app.models import User, Todo
@@ -5,6 +6,18 @@ from app.feature_flags import FeatureFlags
 from datetime import datetime, timezone
 
 bp = Blueprint('api', __name__)
+
+VALID_PRIORITIES = {'high', 'medium', 'low'}
+EMAIL_RE = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+
+
+def _parse_due_date(raw_value):
+    """Parse an ISO-format due_date string, or return None for falsy input.
+    Raises a (message) tuple-friendly ValueError-derived response upstream --
+    callers should catch ValueError and return 400."""
+    if not raw_value:
+        return None
+    return datetime.fromisoformat(raw_value)
 
 
 def _todo_dict(todo):
@@ -62,22 +75,31 @@ def get_todo(todo_id):
 def create_todo():
     data = request.get_json()
 
-    if not data or not data.get('title'):
+    if not data or not data.get('title') or not data.get('title').strip():
         return jsonify({'error': 'Title is required'}), 400
     if not data.get('user_id'):
         return jsonify({'error': 'User ID is required'}), 400
+
+    priority = data.get('priority', 'medium')
+    if priority not in VALID_PRIORITIES:
+        return jsonify({'error': f'Priority must be one of: {", ".join(sorted(VALID_PRIORITIES))}'}), 400
 
     user = User.query.get(data['user_id'])
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
+    try:
+        due_date = _parse_due_date(data.get('due_date'))
+    except ValueError:
+        return jsonify({'error': 'due_date must be a valid ISO-8601 datetime string'}), 400
+
     todo = Todo(
         user_id=data['user_id'],
         title=data['title'],
         description=data.get('description'),
-        priority=data.get('priority', 'medium'),
+        priority=priority,
         category=data.get('category'),
-        due_date=datetime.fromisoformat(data['due_date']) if data.get('due_date') else None
+        due_date=due_date
     )
     db.session.add(todo)
     db.session.commit()
@@ -100,7 +122,10 @@ def update_todo(todo_id):
     if 'category' in data:
         todo.category = data['category']
     if 'due_date' in data:
-        todo.due_date = datetime.fromisoformat(data['due_date']) if data['due_date'] else None
+        try:
+            todo.due_date = _parse_due_date(data['due_date'])
+        except ValueError:
+            return jsonify({'error': 'due_date must be a valid ISO-8601 datetime string'}), 400
 
     db.session.commit()
     return jsonify(_todo_dict(todo)), 200
@@ -194,6 +219,8 @@ def register():
 
     if not data or not data.get('username') or not data.get('password'):
         return jsonify({'error': 'Username and password are required'}), 400
+    if data.get('email') and not EMAIL_RE.match(data['email']):
+        return jsonify({'error': 'A valid email address is required'}), 400
     if User.query.filter_by(username=data['username']).first():
         return jsonify({'error': 'Username already exists'}), 409
     if data.get('email') and User.query.filter_by(email=data['email']).first():

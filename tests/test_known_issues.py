@@ -1,16 +1,17 @@
 """
-Known-issue tests — these document REAL gaps in current app behavior and are
-EXPECTED TO FAIL against today's code. This is intentional: Smart Tests'
-confidence model needs genuine pass/fail diversity tied to real code paths
-to build a meaningful confidence curve, not just more passing tests.
+Regression tests for real bugs found while expanding test coverage.
 
-Each test below corresponds to an actual, reproducible bug or missing
-validation in app/routes.py, found while expanding test coverage. They are
-left failing on purpose as a real backlog, not fixed here, so this file
-also doubles as a findings list for engineering.
+These were originally committed as intentionally-failing tests (see git
+history) specifically so Smart Tests would have genuine pass/fail
+diversity to learn from, not just more passing tests. The underlying
+bugs in app/routes.py have since been fixed (strip-checked titles,
+validated priority, try/except around due_date parsing, email format
+validation), so these now pass for real -- giving Smart Tests a second,
+even more useful signal: the same tests flipping from fail to pass tied
+to an actual code change, not just a one-off failure.
 
-DO NOT silently "fix" these by weakening the assertions -- if the
-underlying route behavior is fixed, the test should then pass for real.
+DO NOT weaken these assertions to make them pass -- if a future change
+reintroduces one of these bugs, this file should fail again for real.
 """
 
 import os
@@ -47,17 +48,16 @@ def user(app):
 
 
 # ══════════════════════════════════════════════════════════════
-# BUG: malformed due_date crashes with an unhandled ValueError
-# instead of returning a 400. routes.py calls
-# datetime.fromisoformat(data['due_date']) with no try/except.
+# FIXED: malformed due_date used to crash with an unhandled ValueError
+# instead of returning a 400. create_todo/update_todo now go through
+# _parse_due_date() wrapped in try/except ValueError.
 # ══════════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize('bad_due_date', [
     'not-a-date', '2026/08/01', '31-12-2026', 'tomorrow', '13:45',
 ])
 def test_create_todo_should_return_400_for_malformed_due_date(client, user, bad_due_date):
-    """FAILS TODAY: raises ValueError instead of returning 400.
-    Expected/desired behavior once fixed: a 400 with a clear error message."""
+    """Was failing (unhandled ValueError) -- now returns a clean 400."""
     response = client.post('/todos', json={'title': 'Bad date', 'user_id': user, 'due_date': bad_due_date})
     assert response.status_code == 400
     assert 'error' in response.get_json()
@@ -65,7 +65,7 @@ def test_create_todo_should_return_400_for_malformed_due_date(client, user, bad_
 
 @pytest.mark.parametrize('bad_due_date', ['not-a-date', 'invalid-format'])
 def test_update_todo_should_return_400_for_malformed_due_date(client, user, bad_due_date):
-    """FAILS TODAY: same unhandled ValueError bug exists in update_todo()."""
+    """Was failing -- same fix applied to update_todo()."""
     create = client.post('/todos', json={'title': 'To update', 'user_id': user})
     todo_id = create.get_json()['id']
     response = client.put(f'/todos/{todo_id}', json={'due_date': bad_due_date})
@@ -73,8 +73,8 @@ def test_update_todo_should_return_400_for_malformed_due_date(client, user, bad_
 
 
 # ══════════════════════════════════════════════════════════════
-# BUG: whitespace-only title is accepted as valid (route only
-# checks truthiness of the raw string, not stripped content).
+# FIXED: whitespace-only title used to be accepted as valid.
+# create_todo now checks title.strip() truthiness too.
 # ══════════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize('whitespace_title', [
@@ -84,15 +84,14 @@ def test_update_todo_should_return_400_for_malformed_due_date(client, user, bad_
     pytest.param('  \t\n  ', id='mixed_whitespace'),
 ])
 def test_create_todo_should_reject_whitespace_only_title(client, user, whitespace_title):
-    """FAILS TODAY: whitespace-only titles are accepted (201) instead of
-    rejected (400) -- 'Title is required' should arguably mean non-blank."""
+    """Was failing (201 accepted) -- now correctly rejected with 400."""
     response = client.post('/todos', json={'title': whitespace_title, 'user_id': user})
     assert response.status_code == 400
 
 
 # ══════════════════════════════════════════════════════════════
-# BUG: priority accepts any arbitrary string, not just high/medium/low.
-# The by_priority stats breakdown silently ignores anything else.
+# FIXED: priority used to accept any arbitrary string. create_todo now
+# validates against VALID_PRIORITIES = {'high', 'medium', 'low'}.
 # ══════════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize('invalid_priority', [
@@ -100,25 +99,27 @@ def test_create_todo_should_reject_whitespace_only_title(client, user, whitespac
     pytest.param('', id='empty_string'),
 ])
 def test_create_todo_should_reject_invalid_priority_value(client, user, invalid_priority):
-    """FAILS TODAY: any string is accepted for priority with no validation
-    against the documented high/medium/low set."""
+    """Was failing (any string accepted) -- now returns 400."""
     response = client.post('/todos', json={'title': 'Priority check', 'user_id': user, 'priority': invalid_priority})
     assert response.status_code == 400
 
 
 def test_stats_by_priority_should_account_for_all_todos(client, user):
-    """FAILS TODAY: a todo created with an invalid/unexpected priority value
-    is silently excluded from every by_priority bucket, so
-    high + medium + low can under-count the real total."""
+    """Was failing when an invalid-priority todo silently vanished from
+    every by_priority bucket. Now trivially holds, because invalid
+    priorities are rejected at creation time (T2 below never gets
+    created) -- still a meaningful regression guard: if priority
+    validation is ever removed, this goes back to failing too."""
     client.post('/todos', json={'title': 'T1', 'user_id': user, 'priority': 'high'})
-    client.post('/todos', json={'title': 'T2', 'user_id': user, 'priority': 'urgent'})  # not in high/medium/low
+    client.post('/todos', json={'title': 'T2', 'user_id': user, 'priority': 'urgent'})  # rejected, not created
     data = client.get('/todos/stats').get_json()
     accounted_for = data['by_priority']['high'] + data['by_priority']['medium'] + data['by_priority']['low']
     assert accounted_for == data['total']
 
 
 # ══════════════════════════════════════════════════════════════
-# BUG: register() does not validate email format at all.
+# FIXED: register() did not validate email format at all.
+# Now checked against EMAIL_RE before uniqueness checks.
 # ══════════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize('bad_email', [
@@ -127,8 +128,7 @@ def test_stats_by_priority_should_account_for_all_todos(client, user):
     'double@@at.com',
 ])
 def test_register_should_reject_invalid_email_format(client, bad_email):
-    """FAILS TODAY: no email format validation exists in the register route,
-    so any string is stored as a user's email."""
+    """Was failing (any string stored as email) -- now returns 400."""
     response = client.post('/auth/register', json={
         'username': f'emailtest_{hash(bad_email) % 100000}', 'password': 'pass123', 'email': bad_email,
     })
