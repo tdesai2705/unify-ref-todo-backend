@@ -58,8 +58,8 @@ def test_register_rejects_missing_required_fields(client, payload):
     ('user_with_underscore', 'pass123'),
     ('user.with.dots', 'pass123'),
     ('UPPERCASE', 'pass123'),
-    ('a' * 80, 'pass123'),
-    ('ünïcödé_user', 'pass123'),
+    pytest.param('a' * 80, 'pass123', id='max_length_80-pass123'),
+    pytest.param('ünïcödé_user', 'pass123', id='unicode_username-pass123'),
     ('123numericstart', 'pass123'),
 ])
 def test_register_accepts_valid_username_formats(client, username, password):
@@ -126,8 +126,12 @@ def test_register_with_explicit_email_is_preserved(client, email):
 # ══════════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize('password', [
-    '1', 'a', 'password', 'P@ssw0rd!', 'a' * 100, '12345678',
-    'with spaces in it', 'ünïcödé_pässwörd', '!@#$%^&*()',
+    '1', 'a', 'password', 'P@ssw0rd!',
+    pytest.param('a' * 100, id='max_length_100'),
+    '12345678',
+    pytest.param('with spaces in it', id='with_spaces'),
+    pytest.param('ünïcödé_pässwörd', id='unicode_password'),
+    pytest.param('!@#$%^&*()', id='special_chars'),
 ])
 def test_register_accepts_any_nonempty_password(client, password):
     response = client.post('/auth/register', json={'username': f'pwuser_{hash(password) % 100000}', 'password': password})
@@ -135,7 +139,8 @@ def test_register_accepts_any_nonempty_password(client, password):
 
 
 @pytest.mark.parametrize('password', [
-    '1', 'password', 'P@ssw0rd!', 'ünïcödé_pässwörd',
+    '1', 'password', 'P@ssw0rd!',
+    pytest.param('ünïcödé_pässwörd', id='unicode_password'),
 ])
 def test_registered_password_is_hashed_not_stored_plaintext(client, app, password):
     client.post('/auth/register', json={'username': f'hashcheck_{hash(password) % 100000}', 'password': password})
@@ -213,8 +218,8 @@ def test_login_finds_correct_user_among_many(client, app, n_users, target_index)
     ('roundtrip1', 'pass1', 'rt1@example.com'),
     ('roundtrip2', 'pass2', None),
     ('roundtrip3', 'complex!P@ss', 'rt3@example.com'),
-    ('roundtrip4', 'ünïcödé', None),
-    ('roundtrip5', 'a' * 50, 'rt5@example.com'),
+    pytest.param('roundtrip4', 'ünïcödé', None, id='roundtrip4-unicode_password-None'),
+    pytest.param('roundtrip5', 'a' * 50, 'rt5@example.com', id='roundtrip5-max_length_50-email'),
 ])
 def test_register_then_login_round_trip(client, username, password, email):
     reg_payload = {'username': username, 'password': password}

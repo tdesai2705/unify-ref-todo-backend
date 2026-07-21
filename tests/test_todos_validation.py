@@ -50,17 +50,25 @@ INVALID_TITLES = [
     '', None,
 ]
 
+# Explicit ids on every non-trivial value: pytest's auto-generated parametrize
+# ids for long/unicode/special-character strings are not guaranteed to
+# round-trip identically between two separate `pytest --collect-only`
+# invocations (see build #95 -- a 5000-char string's auto-id didn't match
+# on re-collection). Smart Tests' subset flow depends on exact node-id
+# matching across two such collections, so every "interesting" edge-case
+# value here gets a short, stable, plain-ASCII id instead of relying on
+# pytest to derive one from the value itself.
 VALID_TITLES = [
-    'a',
-    'Buy groceries',
-    'A' * 200,          # matches String(200) column limit exactly
-    'Ünïcödé tïtlé 🎉',
-    'Title with "quotes" and \'apostrophes\'',
-    '   leading and trailing spaces   ',
-    'Line1\nLine2',
-    '<script>alert(1)</script>',
-    '日本語のタイトル',
-    '123456789',
+    pytest.param('a', id='single_char'),
+    pytest.param('Buy groceries', id='normal_title'),
+    pytest.param('A' * 200, id='max_length_200'),          # matches String(200) column limit exactly
+    pytest.param('Ünïcödé tïtlé 🎉', id='unicode_emoji'),
+    pytest.param('Title with "quotes" and \'apostrophes\'', id='quotes_and_apostrophes'),
+    pytest.param('   leading and trailing spaces   ', id='leading_trailing_spaces'),
+    pytest.param('Line1\nLine2', id='embedded_newline'),
+    pytest.param('<script>alert(1)</script>', id='script_tag'),
+    pytest.param('日本語のタイトル', id='japanese_text'),
+    pytest.param('123456789', id='numeric_string'),
 ]
 
 
@@ -130,7 +138,12 @@ def test_create_todo_defaults_priority_to_medium_when_omitted(client, user):
 # create_todo — category (freeform, no validation)
 # ══════════════════════════════════════════════════════════════
 
-@pytest.mark.parametrize('category', ['work', 'personal', 'shopping', 'health', '', 'Ünïcödé', None])
+@pytest.mark.parametrize('category', [
+    'work', 'personal', 'shopping', 'health',
+    pytest.param('', id='empty_string'),
+    pytest.param('Ünïcödé', id='unicode'),
+    None,
+])
 def test_create_todo_accepts_any_category(client, user, category):
     payload = {'title': 'Category test', 'user_id': user}
     if category is not None:
@@ -204,8 +217,13 @@ def test_create_todo_without_due_date_defaults_to_none(client, user):
 # ══════════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize('description', [
-    None, '', 'Short description', 'A' * 5000, 'Multi\nline\ndescription',
-    'Emoji 🎉🚀✅', '<b>HTML in description</b>',
+    None,
+    pytest.param('', id='empty_string'),
+    'Short description',
+    pytest.param('A' * 5000, id='max_length_5000'),
+    pytest.param('Multi\nline\ndescription', id='embedded_newlines'),
+    pytest.param('Emoji 🎉🚀✅', id='emoji'),
+    pytest.param('<b>HTML in description</b>', id='html_tag'),
 ])
 def test_create_todo_accepts_any_description(client, user, description):
     payload = {'title': 'Description test', 'user_id': user}
@@ -249,9 +267,9 @@ def _make_todo(client, user):
 
 @pytest.mark.parametrize('field,value', [
     ('title', 'New title'),
-    ('title', 'A' * 200),
+    pytest.param('title', 'A' * 200, id='title-max_length_200'),
     ('description', 'New description'),
-    ('description', ''),
+    pytest.param('description', '', id='description-empty_string'),
     ('completed', True),
     ('completed', False),
     ('priority', 'high'),
