@@ -77,7 +77,12 @@ def test_update_todo_should_return_400_for_malformed_due_date(client, user, bad_
 # checks truthiness of the raw string, not stripped content).
 # ══════════════════════════════════════════════════════════════
 
-@pytest.mark.parametrize('whitespace_title', ['   ', '\t', '\n', '  \t\n  '])
+@pytest.mark.parametrize('whitespace_title', [
+    pytest.param('   ', id='spaces_only'),
+    pytest.param('\t', id='tab_only'),
+    pytest.param('\n', id='newline_only'),
+    pytest.param('  \t\n  ', id='mixed_whitespace'),
+])
 def test_create_todo_should_reject_whitespace_only_title(client, user, whitespace_title):
     """FAILS TODAY: whitespace-only titles are accepted (201) instead of
     rejected (400) -- 'Title is required' should arguably mean non-blank."""
@@ -90,7 +95,10 @@ def test_create_todo_should_reject_whitespace_only_title(client, user, whitespac
 # The by_priority stats breakdown silently ignores anything else.
 # ══════════════════════════════════════════════════════════════
 
-@pytest.mark.parametrize('invalid_priority', ['urgent', 'critical', 'none', 'HIGH', '5', ''])
+@pytest.mark.parametrize('invalid_priority', [
+    'urgent', 'critical', 'none', 'HIGH', '5',
+    pytest.param('', id='empty_string'),
+])
 def test_create_todo_should_reject_invalid_priority_value(client, user, invalid_priority):
     """FAILS TODAY: any string is accepted for priority with no validation
     against the documented high/medium/low set."""
@@ -114,7 +122,9 @@ def test_stats_by_priority_should_account_for_all_todos(client, user):
 # ══════════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize('bad_email', [
-    'not-an-email', 'missing-at-sign.com', '@no-local-part.com', 'spaces in@email.com', 'double@@at.com',
+    'not-an-email', 'missing-at-sign.com', '@no-local-part.com',
+    pytest.param('spaces in@email.com', id='spaces_in_email'),
+    'double@@at.com',
 ])
 def test_register_should_reject_invalid_email_format(client, bad_email):
     """FAILS TODAY: no email format validation exists in the register route,

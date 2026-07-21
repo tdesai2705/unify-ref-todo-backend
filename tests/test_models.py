@@ -24,8 +24,14 @@ def app():
 # ══════════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize('password', [
-    'simple', 'P@ssw0rd!', 'a' * 200, 'ünïcödé_pässwörd', '12345678',
-    'with spaces', '!@#$%^&*()_+-=', '', 'ThisIsAVeryLongPasswordThatShouldStillWork1234567890',
+    'simple', 'P@ssw0rd!',
+    pytest.param('a' * 200, id='max_length_200'),
+    pytest.param('ünïcödé_pässwörd', id='unicode_password'),
+    '12345678',
+    pytest.param('with spaces', id='with_spaces'),
+    pytest.param('!@#$%^&*()_+-=', id='special_chars'),
+    pytest.param('', id='empty_string'),
+    'ThisIsAVeryLongPasswordThatShouldStillWork1234567890',
 ])
 def test_user_password_hash_never_equals_plaintext(app, password):
     with app.app_context():
@@ -36,7 +42,10 @@ def test_user_password_hash_never_equals_plaintext(app, password):
 
 
 @pytest.mark.parametrize('password', [
-    'simple', 'P@ssw0rd!', 'ünïcödé_pässwörd', '12345678', 'with spaces',
+    'simple', 'P@ssw0rd!',
+    pytest.param('ünïcödé_pässwörd', id='unicode_password'),
+    '12345678',
+    pytest.param('with spaces', id='with_spaces'),
 ])
 def test_user_check_password_correct(app, password):
     with app.app_context():
@@ -80,7 +89,7 @@ def test_user_same_password_produces_different_hashes(app, password):
 @pytest.mark.parametrize('username,email', [
     ('alice', 'alice@example.com'),
     ('bob_smith', 'bob@work.io'),
-    ('ünïcödé_name', 'unicode@example.com'),
+    pytest.param('ünïcödé_name', 'unicode@example.com', id='unicode_username-email'),
     ('a', 'a@b.co'),
 ])
 def test_user_to_dict_fields(app, username, email):
@@ -115,9 +124,9 @@ def test_user_to_dict_excludes_password_hash(app):
 @pytest.mark.parametrize('title,description,priority,category', [
     ('T1', 'D1', 'high', 'work'),
     ('T2', None, 'medium', None),
-    ('T3', '', 'low', ''),
-    ('Ünïcödé', 'Déscríptïön', 'high', 'personal'),
-    ('T5', 'A' * 500, 'medium', 'shopping'),
+    pytest.param('T3', '', 'low', '', id='T3-empty_description-low-empty_category'),
+    pytest.param('Ünïcödé', 'Déscríptïön', 'high', 'personal', id='unicode_title-unicode_description-high-personal'),
+    pytest.param('T5', 'A' * 500, 'medium', 'shopping', id='T5-max_length_500-medium-shopping'),
 ])
 def test_todo_to_dict_fields(app, title, description, priority, category):
     with app.app_context():
